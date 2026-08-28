@@ -61,6 +61,9 @@ function pathBaseName(path: string): string {
 function originLabel(installation: Installation): string {
   let label: string
   switch (installation.origin) {
+    case 'shared':
+      label = t('detail.originShared')
+      break
     case 'legacy':
       label = t('detail.originLegacy')
       break

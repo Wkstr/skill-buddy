@@ -64,6 +64,7 @@ export interface SkillTreeLabels {
   plugin: string
   system: string
   admin: string
+  shared: string
   legacy: string
 }
 
@@ -101,7 +102,8 @@ function scopeIdentity(
     plugin: { label: labels.plugin, order: 20 },
     system: { label: labels.system, order: 30 },
     admin: { label: labels.admin, order: 40 },
-    legacy: { label: labels.legacy, order: 50 },
+    shared: { label: labels.shared, order: 50 },
+    legacy: { label: labels.legacy, order: 60 },
   }
   const item = origins[origin === 'project' ? 'user' : origin]
   return {

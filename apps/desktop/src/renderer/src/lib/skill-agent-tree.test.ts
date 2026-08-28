@@ -9,6 +9,7 @@ const labels: SkillTreeLabels = {
   plugin: 'plugin',
   system: 'system',
   admin: 'admin',
+  shared: 'shared',
   legacy: 'legacy',
 }
 

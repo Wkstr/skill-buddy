@@ -27,7 +27,8 @@
   "dependencies": {
     "@decimalturn/toml-patch": "3.0.2",
     "gray-matter": "^4.0.3",
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "^3.3.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -40,6 +40,7 @@ const labels = computed<SkillTreeLabels>(() => ({
   plugin: t('skillTree.plugin'),
   system: t('skillTree.system'),
   admin: t('skillTree.admin'),
+  shared: t('skillTree.shared'),
   legacy: t('skillTree.legacy'),
 }))
 const tree = computed(() =>

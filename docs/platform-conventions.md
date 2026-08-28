@@ -13,7 +13,7 @@
 | Cursor 2.4+ | `~/.cursor/skills/` | `.cursor/skills/` | `~/.cursor` | 官方 |
 | OpenCode | `~/.config/opencode/skills/` | `.opencode/skills/` | `~/.config/opencode` | 官方 |
 | Pi | `~/.pi/agent/skills/` | `.pi/skills/` | `~/.pi/agent` | 官方 |
-| OMP Agent（oh-my-pi） | `~/.omp/agent/skills/` | `.omp/skills/` | `~/.omp/agent` | 官方 |
+| OMP Agent（oh-my-pi） | `getAgentDir()/skills/`（默认 `~/.omp/agent/skills/`） | `.omp/skills/` | `getAgentDir()` | 官方 |
 | WorkBuddy | `~/.workbuddy/skills/` | 无（桌面助手，无项目概念） | `~/.workbuddy` | 多来源一致（非官方一手） |
 | GitHub Copilot | `~/.copilot/skills/` | `.github/skills/` | `~/.copilot` | 官方 |
 | Gemini CLI | `~/.gemini/skills/` | `.gemini/skills/` | `~/.gemini` | 官方 |
@@ -84,16 +84,18 @@ Skill 必须依据 `~/.claude/plugins/installed_plugins.json` 中的 `installPat
 - Pi 与它的 fork oh-my-pi 都采用非对称目录：用户级目录包含 `agent` 段，
   项目级目录不包含该段。
 - Pi 使用 `~/.pi/agent/skills/` 与 `<repo>/.pi/skills/`；OMP Agent 使用
-  `~/.omp/agent/skills/` 与 `<repo>/.omp/skills/`。
-- Pi 还会读取共享的 `~/.agents/skills/`；SkillBuddy 将其作为 Pi 的只读补充
-  来源展示，避免覆盖 Codex 等平台共用的目录内容。
-- OMP 还会读取共享的 `~/.agent/skills/` 与 `~/.agents/skills/`；这两个目录
-  同样只读展示，OMP 的安装目标仍是专属的 `~/.omp/agent/skills/`。
-- 为对齐 OMP `/skill` 的用户级聚合口径，SkillBuddy 还将 `~/.claude/skills/`、
-  `~/.codex/skills/`、`~/.omp/agent/managed-skills/`，以及 Claude
-  `installed_plugins.json` 中真正启用插件的 `skills/` 作为 OMP 只读来源。
-- 自动检测以各自的 `~/.pi/agent`、`~/.omp/agent` 为安装标记；两者均使用
-  标准 `SKILL.md` 目录格式，可复用通用目录适配器。
+  `<getAgentDir()>/skills/` 与 `<repo>/.omp/skills/`。
+- Pi 还会读取用户级和项目级 `.agents/skills/`；SkillBuddy 将其作为 Pi 的只读
+  共享来源展示，避免覆盖 Codex 等平台共用的目录内容。
+- OMP 用户级安装目标由 `getAgentDir()` 决定；named profile 使用
+  `~/.omp/profiles/<profile>/agent/skills/`，默认 profile 仍使用
+  `~/.omp/agent/skills/`。
+- OMP 的只读来源覆盖用户级 `.agent[s]`、Claude、Codex、Pi、OpenCode、managed
+  Skills，以及项目级 `.agent[s]`、Claude、Codex、Pi、OpenCode、GitHub Skills。
+- OMP 同时读取启用的 Claude/OMP marketplace 插件和 OMP extension 包的
+  `skills/`；项目插件保留项目作用域，显式禁用的插件不会显示。
+- 自动检测跟随 Pi 的 `~/.pi/agent` 和 OMP 当前 profile 的 `getAgentDir()`；两者均
+  使用标准 `SKILL.md` 目录格式。
 
 ### WorkBuddy（腾讯 CodeBuddy 产品线桌面助手）
 

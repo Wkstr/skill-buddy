@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { OmpAdapter } from './adapters/omp-adapter.js'
+import { BUILTIN_PLATFORMS } from './platforms.js'
 import {
   discoverClaudePluginRoots,
   discoverCodexSupplementalRoots,
@@ -40,56 +42,19 @@ describe('supplemental skill roots', () => {
       'utf8',
     )
 
-    expect(await discoverOmpSupplementalRoots(home)).toEqual([
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(home, '.agent', 'skills'),
-        origin: 'legacy',
-        readOnly: true,
-        canToggle: false,
-      },
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(home, '.agents', 'skills'),
-        origin: 'legacy',
-        readOnly: true,
-        canToggle: false,
-      },
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(home, '.claude', 'skills'),
-        origin: 'legacy',
-        readOnly: true,
-        canToggle: false,
-      },
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(home, '.codex', 'skills'),
-        origin: 'legacy',
-        readOnly: true,
-        canToggle: false,
-      },
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(home, '.omp', 'agent', 'managed-skills'),
-        origin: 'legacy',
-        readOnly: true,
-        canToggle: false,
-      },
-      {
-        agent: 'omp',
-        scope: 'user',
-        path: join(installedPlugin, 'skills'),
-        origin: 'plugin',
-        readOnly: true,
-        canToggle: false,
-      },
-    ])
+    expect(await discoverOmpSupplementalRoots(home, [], {})).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: join(home, '.agent', 'skills'), origin: 'shared' }),
+        expect.objectContaining({ path: join(home, '.agents', 'skills'), origin: 'shared' }),
+        expect.objectContaining({ path: join(home, '.claude', 'skills'), origin: 'shared' }),
+        expect.objectContaining({ path: join(home, '.codex', 'skills'), origin: 'shared' }),
+        expect.objectContaining({
+          path: join(home, '.omp', 'agent', 'managed-skills'),
+          origin: 'shared',
+        }),
+        expect.objectContaining({ path: join(installedPlugin, 'skills'), origin: 'plugin' }),
+      ]),
+    )
   })
 
   it('scans Skills loaded by OMP from shared and plugin roots', async () => {
@@ -119,7 +84,7 @@ describe('supplemental skill roots', () => {
       'utf8',
     )
 
-    const roots = await discoverOmpSupplementalRoots(home)
+    const roots = await discoverOmpSupplementalRoots(home, [], {})
     const installations = await scanInstalledSkills([], roots)
 
     expect(installations).toEqual(
@@ -140,19 +105,152 @@ describe('supplemental skill roots', () => {
     )
   })
 
-  it('discovers the shared user Skills root loaded by Pi as read-only', async () => {
+  it('discovers the shared user and project Skills roots loaded by Pi as read-only', async () => {
     const home = await tempHome()
+    const projectRoot = join(home, 'project')
 
-    expect(discoverPiSupplementalRoots(home)).toEqual([
+    expect(discoverPiSupplementalRoots(home, [projectRoot])).toEqual([
       {
         agent: 'pi',
         scope: 'user',
         path: join(home, '.agents', 'skills'),
-        origin: 'legacy',
+        origin: 'shared',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'pi',
+        scope: 'project',
+        path: join(projectRoot, '.agents', 'skills'),
+        projectRoot,
+        origin: 'shared',
         readOnly: true,
         canToggle: false,
       },
     ])
+  })
+
+  it('uses the active OMP profile and discovers project shared providers', async () => {
+    const home = await tempHome()
+    const projectRoot = join(home, 'project')
+    const roots = await discoverOmpSupplementalRoots(home, [projectRoot], { OMP_PROFILE: 'work' })
+    const def = BUILTIN_PLATFORMS.find((platform) => platform.id === 'omp')!
+    const adapter = new OmpAdapter(def, home, { OMP_PROFILE: 'work' })
+
+    expect(adapter.skillsDir('user')).toBe(
+      join(home, '.omp', 'profiles', 'work', 'agent', 'skills'),
+    )
+
+    expect(roots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(home, '.omp', 'profiles', 'work', 'agent', 'managed-skills'),
+          scope: 'user',
+        }),
+        expect.objectContaining({
+          path: join(projectRoot, '.agents', 'skills'),
+          scope: 'project',
+          projectRoot,
+          origin: 'shared',
+        }),
+        expect.objectContaining({
+          path: join(projectRoot, '.github', 'skills'),
+          scope: 'project',
+          projectRoot,
+          origin: 'shared',
+        }),
+      ]),
+    )
+  })
+
+  it('preserves project Claude plugin scope and skips disabled plugins for OMP', async () => {
+    const home = await tempHome()
+    const projectRoot = join(home, 'project')
+    const manifestPath = join(home, '.claude', 'plugins', 'installed_plugins.json')
+    const localPlugin = join(home, 'plugins', 'local')
+    const disabledRecord = join(home, 'plugins', 'disabled-record')
+    const disabledSetting = join(home, 'plugins', 'disabled-setting')
+    await fs.mkdir(dirname(manifestPath), { recursive: true })
+    await fs.mkdir(join(home, '.claude'), { recursive: true })
+    await fs.writeFile(
+      manifestPath,
+      JSON.stringify({
+        plugins: {
+          'local@market': [{ scope: 'local', projectPath: projectRoot, installPath: localPlugin }],
+          'record@market': [{ installPath: disabledRecord, enabled: false }],
+          'setting@market': [{ installPath: disabledSetting }],
+        },
+      }),
+    )
+    await fs.writeFile(
+      join(home, '.claude', 'settings.json'),
+      JSON.stringify({ enabledPlugins: { 'setting@market': false } }),
+    )
+
+    const roots = await discoverOmpSupplementalRoots(home, [projectRoot], {})
+
+    expect(roots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(localPlugin, 'skills'),
+          scope: 'project',
+          projectRoot,
+          origin: 'plugin',
+        }),
+      ]),
+    )
+    expect(roots.some((root) => root.path === join(disabledRecord, 'skills'))).toBe(false)
+    expect(roots.some((root) => root.path === join(disabledSetting, 'skills'))).toBe(false)
+  })
+
+  it('discovers project-configured OMP extension Skills with project scope', async () => {
+    const home = await tempHome()
+    const projectRoot = join(home, 'project')
+    const extensionRoot = join(projectRoot, 'extensions', 'review-tools')
+    await fs.mkdir(join(projectRoot, '.omp'), { recursive: true })
+    await fs.writeFile(
+      join(projectRoot, '.omp', 'config.yml'),
+      'extensions:\n  - ./extensions/review-tools\n',
+    )
+
+    expect(await discoverOmpSupplementalRoots(home, [projectRoot], {})).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(extensionRoot, 'skills'),
+          scope: 'project',
+          projectRoot,
+          origin: 'plugin',
+        }),
+      ]),
+    )
+  })
+
+  it('only discovers enabled OMP plugin packages', async () => {
+    const home = await tempHome()
+    const pluginsRoot = join(home, '.omp', 'plugins')
+    const enabledRoot = join(pluginsRoot, 'node_modules', 'enabled-plugin')
+    const disabledRoot = join(pluginsRoot, 'node_modules', 'disabled-plugin')
+    await fs.mkdir(enabledRoot, { recursive: true })
+    await fs.mkdir(disabledRoot, { recursive: true })
+    await fs.writeFile(
+      join(pluginsRoot, 'package.json'),
+      JSON.stringify({ dependencies: { 'enabled-plugin': '1.0.0', 'disabled-plugin': '1.0.0' } }),
+    )
+    await fs.writeFile(
+      join(pluginsRoot, 'omp-plugins.lock.json'),
+      JSON.stringify({ plugins: { 'disabled-plugin': { enabled: false } } }),
+    )
+    await fs.writeFile(join(enabledRoot, 'package.json'), JSON.stringify({ omp: {} }))
+    await fs.writeFile(join(disabledRoot, 'package.json'), JSON.stringify({ omp: {} }))
+
+    const roots = await discoverOmpSupplementalRoots(home, [], {})
+
+    expect(roots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: join(enabledRoot, 'skills'), origin: 'plugin' }),
+      ]),
+    )
+    expect(roots.some((root) => root.path === join(disabledRoot, 'skills'))).toBe(false)
   })
 
   it('discovers Codex legacy, system, admin and latest plugin roots', async () => {

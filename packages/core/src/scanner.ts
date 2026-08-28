@@ -95,7 +95,7 @@ export async function listSkillRoots(projectRoots: string[] = []): Promise<Skill
       })
     }
 
-    const supplementalRoots = await adapter.supplementalRoots?.()
+    const supplementalRoots = await adapter.supplementalRoots?.(projectRoots)
     if (supplementalRoots) {
       roots.push(...supplementalRoots)
     } else {
