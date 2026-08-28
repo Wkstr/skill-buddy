@@ -4,6 +4,8 @@ import { ClaudeCodeAdapter } from './claude-code-adapter.js'
 import { CodexAdapter } from './codex-adapter.js'
 import { DoubaoAdapter } from './doubao-adapter.js'
 import { LingxiAdapter } from './lingxi-adapter.js'
+import { OmpAdapter } from './omp-adapter.js'
+import { PiAdapter } from './pi-adapter.js'
 import { PlatformAdapter } from './platform-adapter.js'
 
 export type AdapterFactory = (def: PlatformDef, homeDir?: string) => AgentAdapter
@@ -11,6 +13,8 @@ export type AdapterFactory = (def: PlatformDef, homeDir?: string) => AgentAdapte
 const builtinFactories: Partial<Record<AgentId, AdapterFactory>> = {
   'claude-code': (def, homeDir) => new ClaudeCodeAdapter(def, homeDir),
   codex: (def, homeDir) => new CodexAdapter(def, homeDir),
+  omp: (def, homeDir) => new OmpAdapter(def, homeDir),
+  pi: (def, homeDir) => new PiAdapter(def, homeDir),
   doubao: (def, homeDir) => new DoubaoAdapter(def, homeDir),
   'wps-lingxi': (def, homeDir) => new LingxiAdapter(def, homeDir),
 }

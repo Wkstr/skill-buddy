@@ -54,6 +54,8 @@ const platformSurfaces: Record<string, string> = {
   'gemini-cli': 'cli',
   'qwen-code': 'cli',
   opencode: 'cli',
+  pi: 'cli',
+  omp: 'cli',
   trae: 'editor',
   'trae-cn': 'editor',
   codebuddy: 'cli',

@@ -11,4 +11,20 @@ describe('BUILTIN_PLATFORMS', () => {
       detectPath: '~/.qwen',
     })
   })
+
+  it.each([
+    ['pi', 'Pi', '~/.pi/agent/skills', '.pi/skills', '~/.pi/agent'],
+    ['omp', 'OMP Agent', '~/.omp/agent/skills', '.omp/skills', '~/.omp/agent'],
+  ] as const)(
+    'registers %s with asymmetric personal and project Skills roots',
+    (id, displayName, userSkillsDir, projectSkillsDir, detectPath) => {
+      expect(BUILTIN_PLATFORMS).toContainEqual({
+        id,
+        displayName,
+        userSkillsDir,
+        projectSkillsDir,
+        detectPath,
+      })
+    },
+  )
 })

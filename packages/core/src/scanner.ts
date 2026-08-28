@@ -26,6 +26,8 @@ export {
   discoverCodexSupplementalRoots,
   discoverDoubaoSupplementalRoots,
   discoverLingxiSupplementalRoots,
+  discoverOmpSupplementalRoots,
+  discoverPiSupplementalRoots,
 } from './adapters/index.js'
 
 /** Detection status of every registered platform, for pickers and sidebars. */

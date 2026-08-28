@@ -14,6 +14,8 @@ import geminiIcon from '@lobehub/icons-static-svg/icons/gemini-color.svg'
 import githubcopilotSvg from '@lobehub/icons-static-svg/icons/githubcopilot.svg?raw'
 import kimiSvg from '@lobehub/icons-static-svg/icons/kimi.svg?raw'
 import opencodeSvg from '@lobehub/icons-static-svg/icons/opencode.svg?raw'
+import ompIcon from '@/assets/platform-icons/omp.svg'
+import piIcon from '@/assets/platform-icons/pi.svg'
 import qwenIcon from '@lobehub/icons-static-svg/icons/qwen-color.svg'
 import traeIcon from '@lobehub/icons-static-svg/icons/trae-color.svg'
 import workbuddyIcon from '@/assets/platform-icons/workbuddy.svg'
@@ -44,6 +46,8 @@ const ICONS: Record<string, PlatformIconDef> = {
   'gemini-cli': { src: geminiIcon },
   'qwen-code': { src: qwenIcon },
   opencode: { maskSrc: svgMask(opencodeSvg) },
+  pi: { src: piIcon },
+  omp: { src: ompIcon },
   codebuddy: { src: codebuddyIcon },
   trae: { src: traeIcon },
   'trae-cn': { src: traeIcon },

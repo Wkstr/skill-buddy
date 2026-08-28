@@ -7,6 +7,8 @@ export type BuiltinAgentId =
   | 'gemini-cli'
   | 'qwen-code'
   | 'opencode'
+  | 'pi'
+  | 'omp'
   | 'trae'
   | 'trae-cn'
   | 'codebuddy'

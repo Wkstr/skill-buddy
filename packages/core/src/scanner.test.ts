@@ -6,6 +6,8 @@ import {
   discoverClaudePluginRoots,
   discoverCodexSupplementalRoots,
   discoverLingxiSupplementalRoots,
+  discoverOmpSupplementalRoots,
+  discoverPiSupplementalRoots,
   scanInstalledSkills,
   type SkillRoot,
 } from './scanner.js'
@@ -23,6 +25,136 @@ afterEach(async () => {
 })
 
 describe('supplemental skill roots', () => {
+  it('discovers the shared user Skills roots loaded by OMP as read-only', async () => {
+    const home = await tempHome()
+    const installedPlugin = join(home, '.claude', 'plugins', 'cache', 'market', 'installed', '1.0.0')
+    const manifestPath = join(home, '.claude', 'plugins', 'installed_plugins.json')
+    await fs.mkdir(dirname(manifestPath), { recursive: true })
+    await fs.writeFile(
+      manifestPath,
+      JSON.stringify({
+        plugins: {
+          'installed@market': [{ scope: 'user', installPath: installedPlugin }],
+        },
+      }),
+      'utf8',
+    )
+
+    expect(await discoverOmpSupplementalRoots(home)).toEqual([
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(home, '.agent', 'skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(home, '.agents', 'skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(home, '.claude', 'skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(home, '.codex', 'skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(home, '.omp', 'agent', 'managed-skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+      {
+        agent: 'omp',
+        scope: 'user',
+        path: join(installedPlugin, 'skills'),
+        origin: 'plugin',
+        readOnly: true,
+        canToggle: false,
+      },
+    ])
+  })
+
+  it('scans Skills loaded by OMP from shared and plugin roots', async () => {
+    const home = await tempHome()
+    const sharedSkill = join(home, '.agents', 'skills', 'shared-skill')
+    const installedPlugin = join(home, '.claude', 'plugins', 'cache', 'market', 'plugin', '1.0.0')
+    const pluginSkill = join(installedPlugin, 'skills', 'plugin-skill')
+    const manifestPath = join(home, '.claude', 'plugins', 'installed_plugins.json')
+    await fs.mkdir(sharedSkill, { recursive: true })
+    await fs.mkdir(pluginSkill, { recursive: true })
+    await fs.writeFile(
+      join(sharedSkill, 'SKILL.md'),
+      '---\nname: shared-skill\ndescription: Shared OMP Skill\n---\n',
+    )
+    await fs.writeFile(
+      join(pluginSkill, 'SKILL.md'),
+      '---\nname: plugin-skill\ndescription: Plugin OMP Skill\n---\n',
+    )
+    await fs.mkdir(dirname(manifestPath), { recursive: true })
+    await fs.writeFile(
+      manifestPath,
+      JSON.stringify({
+        plugins: {
+          'plugin@market': [{ scope: 'user', installPath: installedPlugin }],
+        },
+      }),
+      'utf8',
+    )
+
+    const roots = await discoverOmpSupplementalRoots(home)
+    const installations = await scanInstalledSkills([], roots)
+
+    expect(installations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          agent: 'omp',
+          path: sharedSkill,
+          readOnly: true,
+          skill: expect.objectContaining({ name: 'shared-skill' }),
+        }),
+        expect.objectContaining({
+          agent: 'omp',
+          path: pluginSkill,
+          readOnly: true,
+          skill: expect.objectContaining({ name: 'plugin-skill' }),
+        }),
+      ]),
+    )
+  })
+
+  it('discovers the shared user Skills root loaded by Pi as read-only', async () => {
+    const home = await tempHome()
+
+    expect(discoverPiSupplementalRoots(home)).toEqual([
+      {
+        agent: 'pi',
+        scope: 'user',
+        path: join(home, '.agents', 'skills'),
+        origin: 'legacy',
+        readOnly: true,
+        canToggle: false,
+      },
+    ])
+  })
+
   it('discovers Codex legacy, system, admin and latest plugin roots', async () => {
     const home = await tempHome()
     const codexHome = join(home, '.codex')

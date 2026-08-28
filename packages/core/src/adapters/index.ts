@@ -37,4 +37,6 @@ export {
 export { CodexAdapter, discoverCodexSupplementalRoots } from './codex-adapter.js'
 export { DoubaoAdapter, discoverDoubaoSupplementalRoots } from './doubao-adapter.js'
 export { LingxiAdapter, discoverLingxiSupplementalRoots } from './lingxi-adapter.js'
+export { OmpAdapter, discoverOmpSupplementalRoots } from './omp-adapter.js'
+export { PiAdapter, discoverPiSupplementalRoots } from './pi-adapter.js'
 export { SkillDirAdapter } from './skill-dir-adapter.js'

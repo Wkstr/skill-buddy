@@ -76,6 +76,23 @@ export const BUILTIN_PLATFORMS: readonly PlatformDef[] = [
     detectPath: '~/.config/opencode',
   },
   {
+    // Pi uses an active-agent directory at user scope, but discovers project
+    // skills directly below .pi (without the agent segment).
+    id: 'pi',
+    displayName: 'Pi',
+    userSkillsDir: '~/.pi/agent/skills',
+    projectSkillsDir: '.pi/skills',
+    detectPath: '~/.pi/agent',
+  },
+  {
+    // oh-my-pi follows the same asymmetric convention under its own home.
+    id: 'omp',
+    displayName: 'OMP Agent',
+    userSkillsDir: '~/.omp/agent/skills',
+    projectSkillsDir: '.omp/skills',
+    detectPath: '~/.omp/agent',
+  },
+  {
     id: 'copilot',
     displayName: 'GitHub Copilot',
     // .github/skills is the path recognized across CLI, agent mode and
