@@ -23,7 +23,7 @@
 | Trae CN | `~/.trae-cn/skills/` | `.trae/skills/` | `~/.trae-cn` | 官方社区帖 |
 | 豆包 | `~/Doubao/skills/` | 无（桌面助手） | `~/Doubao` | 本机实测 |
 | Kimi Code | `~/.kimi/skills/` | `.kimi/skills/` | `~/.kimi` | 待真机复核 |
-| Z Code | `~/.zcode/skills/` | `.zcode/skills/` | `~/.zcode` | 待真机复核 |
+| ZCode | `~/.zcode/skills/` | `.zcode/skills/` | `~/.zcode` | 待真机复核 |
 | WPS 灵犀 | `<userData>/serverdir/user_skills/` | 无（桌面助手） | `<userData>` | 本机实测（macOS） |
 
 ## 平台备注
@@ -152,11 +152,11 @@ Skill 必须依据 `~/.claude/plugins/installed_plugins.json` 中的 `installPat
   `~/.kimi/skills/` 与 `.kimi/skills/`
 - 当前环境未安装 Kimi Code，需在真机上复核自动检测与安装后可见性
 
-### Z Code
+### ZCode
 
-- 内置目录暂按 Z Code CLI 的 home/workspace 命名接入：
+- 内置目录暂按 ZCode CLI 的 home/workspace 命名接入：
   `~/.zcode/skills/` 与 `.zcode/skills/`
-- 当前环境未安装 Z Code，需在真机上复核自动检测与安装后可见性
+- 当前环境未安装 ZCode，需在真机上复核自动检测与安装后可见性
 
 ### WPS 灵犀
 - Electron 桌面助手，技能目录挂在 `app.getPath('userData')` 下，

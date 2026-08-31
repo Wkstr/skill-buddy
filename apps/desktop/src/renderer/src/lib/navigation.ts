@@ -3,6 +3,7 @@ export type AppView =
   | 'skills'
   | 'groups'
   | 'mcp'
+  | 'instructions'
   | 'team'
   | 'settings'
 

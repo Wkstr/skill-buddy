@@ -1,6 +1,6 @@
 # Git 团队库
 
-团队库使用企业 Git 仓库管理经过审核的 Skills、MCP 定义和组织策略。Git 是内容、版本、权限和审计的事实来源；SkillBuddy 负责同步、浏览、安装和本地状态检查。
+团队库使用企业 Git 仓库管理经过审核的 Skills、MCP 定义、项目指令模板和组织策略。Git 是内容、版本、权限和审计的事实来源；SkillBuddy 负责同步、浏览、安装和本地状态检查。
 
 ## 企业团队如何使用
 
@@ -23,6 +23,8 @@ ai-team-library/
 │       └── scripts/
 ├── mcp/
 │   └── internal-docs.json
+├── instructions/
+│   └── engineering-baseline.md
 ├── bundles/
 │   └── frontend-developer.json
 └── policies/
@@ -51,6 +53,26 @@ Skills 使用现有 `SKILL.md` 约定。首版 MCP 文件使用 JSON：
 ```
 
 MCP 定义不能包含明文 Token、密码或 API Key，必须使用环境变量或密钥引用。
+
+## 项目指令模板
+
+`instructions/*.md` 保存团队审查过的项目指令。YAML frontmatter 描述模板身份、版本和项目内目标路径，正文是期望的完整文件内容：
+
+```md
+---
+id: engineering-baseline
+name: 工程基础规范
+description: 所有工程仓库共享的 AI 协作约定
+version: 1.0.0
+target: AGENTS.md
+---
+
+# Project Instructions
+
+- Use pnpm for workspace commands.
+```
+
+`id` 和文件名使用 kebab-case。`target` 必须是项目内相对路径，且文件名需要命中 SkillBuddy 指令规则注册表；绝对路径、`..` 和未知文件名会在发布前被拒绝。团队库只保存维护者显式创建的模板，不会自动收集用户全局指令或项目文件。
 
 ## 岗位环境包
 
@@ -111,6 +133,8 @@ requires:
     - skills/security-rules
   mcp:
     - mcp/internal-docs.json
+  instructions:
+    - instructions/engineering-baseline.md
 ```
 
 `library` 是未限定引用使用的默认团队库 ID。存在多个团队库或需要跨库引用时，可使用 `团队库ID:资源引用`：
@@ -124,9 +148,11 @@ requires:
     - security-team:skills/security-rules
   mcp:
     - platform-team:mcp/internal-docs.json
+  instructions:
+    - acme-ai:instructions/engineering-baseline.md
 ```
 
-SkillBuddy 只把安装到当前项目目录、来源与团队库匹配且内容哈希仍为最新的资源视为合规。用户级安装不会满足项目要求；资源缺失、来源无法解析或内容哈希变化会分别显示为缺少、引用无效或版本漂移。
+SkillBuddy 只把安装到当前项目目录、来源与团队库匹配且内容哈希仍为最新的 Skill/MCP 资源视为合规；指令模板则直接比较项目目标文件与模板内容哈希。用户级安装不会满足项目要求；资源缺失、来源无法解析或内容哈希变化会分别显示为缺少、引用无效或版本漂移。
 
 项目还可以增加只对当前项目生效的策略：
 
@@ -139,15 +165,60 @@ requires:
   bundles: []
   skills: []
   mcp: []
+  instructions: []
 policy:
   required:
     skills: []
     mcp: []
+    instructions: []
   recommended:
     skills: []
     mcp: []
+    instructions: []
   blocked: []
 ```
+
+指令模板合规只读取项目根下已登记的项目级指令文件。目标文件不存在时为“缺少”，内容哈希与模板不一致时为“内容漂移”；推荐模板只产生提示，不阻断项目合规。个人全局指令不会参与团队合规，也不会被发送到团队库。
+
+CI 可使用本地检出的团队库执行同一套只读检查：
+
+```bash
+skm instructions check \
+  --project "$PWD" \
+  --library ../ai-team-library
+```
+
+必需模板缺少、漂移或引用无法解析时命令返回非零状态；增加 `--json` 可获得机器可读结果。命令不会联网，也不会修改项目或团队库。
+
+默认输出每个模板一行，前缀为 `PASS` / `WARN`（推荐项未满足）/ `FAIL`（必需项未满足）：
+
+```text
+FAIL instructions/engineering-baseline.md AGENTS.md [outdated]
+instruction policy failed
+```
+
+`--json` 输出结构如下，`state` 取值为 `satisfied` / `missing` / `outdated` / `unresolved`：
+
+```json
+{
+  "projectRoot": "/workspace/app",
+  "libraryRoot": "/workspace/ai-team-library",
+  "libraryId": "acme-ai",
+  "compliant": false,
+  "items": [
+    {
+      "ref": "instructions/engineering-baseline.md",
+      "recommended": false,
+      "state": "outdated",
+      "target": "AGENTS.md",
+      "templatePath": "instructions/engineering-baseline.md",
+      "version": "1.0.0"
+    }
+  ]
+}
+```
+
+仓库可以将检查接入 Pull Request 工作流。示例工作流位于 `.github/workflows/instructions-check.yml`：项目根没有 `.skillbuddy/team.yaml` 时整个检查跳过；团队库仓库通过仓库变量 `TEAM_LIBRARY_REPO` 指定（私有库再配 `TEAM_LIBRARY_TOKEN`），会被检出到 `team-library/`；团队库已随项目一起检出时留空该变量，并用手动触发参数 `library_path` 指向项目内目录。
 
 有效策略按“组织 → 团队 → 项目”合并。必装和推荐资源取并集；相同 `ref + versions` 的禁用规则由后层覆盖前层。`.skillbuddy` 目录与 `team.yaml` 必须位于项目内且不能是符号链接。
 
@@ -159,11 +230,13 @@ policy:
 {
   "required": {
     "skills": ["skills/security-rules"],
-    "mcp": ["mcp/internal-docs.json"]
+    "mcp": ["mcp/internal-docs.json"],
+    "instructions": ["instructions/engineering-baseline.md"]
   },
   "recommended": {
     "skills": [],
-    "mcp": []
+    "mcp": [],
+    "instructions": []
   },
   "blocked": [
     {

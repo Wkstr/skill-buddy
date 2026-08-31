@@ -4,6 +4,7 @@ import type {
   TeamLibraryBundleSummary,
   TeamLibraryConfig,
   TeamLibraryInstallRecord,
+  TeamLibraryInstructionSummary,
   TeamLibraryMcpSummary,
   TeamLibrarySkillSummary,
 } from '#shared/ipc'
@@ -122,6 +123,15 @@ export function useTeamLibraries() {
         left.name.localeCompare(right.name),
       ),
   )
+  const instructions = computed<TeamLibraryInstructionSummary[]>(() =>
+    catalogs.value
+      .flatMap((catalog) => catalog.instructions)
+      .sort((left, right) =>
+        (order.value.get(teamLibraryConfigKey(left)) ?? 0) -
+          (order.value.get(teamLibraryConfigKey(right)) ?? 0) ||
+        left.name.localeCompare(right.name),
+      ),
+  )
   const attentionCount = computed(() => {
     const installed = new Set(installations.value
       .filter((item) => item.status !== 'missing')
@@ -220,6 +230,7 @@ export function useTeamLibraries() {
     skills,
     mcpServers,
     bundles,
+    instructions,
     loading: readonly(loading),
     errors: readonly(errors),
     warnings: readonly(warnings),

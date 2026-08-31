@@ -30,6 +30,27 @@ describe('normalizeNativeMcpServer', () => {
       },
     })
     expect(result.authState).toBe('missing-secrets')
+    // 内嵌在参数里的密钥已经有值，不算缺失；只有取不到值的 ${DATABASE_URL} 才是。
+    expect(result.missingSecrets).toEqual(['DATABASE_URL'])
+  })
+
+  it('逐个区分缺失的环境引用，不因同伴缺失而把已有值的引用算作缺失', () => {
+    const result = normalizeNativeMcpServer(
+      'mixed',
+      {
+        command: 'node',
+        args: ['server.js'],
+        env: {
+          PRESENT_TOKEN: '${PRESENT_TOKEN}',
+          ABSENT_TOKEN: '${ABSENT_TOKEN}',
+        },
+      },
+      'standard',
+      { PRESENT_TOKEN: 'from-shell' },
+    )
+
+    expect(result.authState).toBe('missing-secrets')
+    expect(result.missingSecrets).toEqual(['ABSENT_TOKEN'])
   })
 
   it('redacts remote headers, sensitive URL query values and credentials', () => {

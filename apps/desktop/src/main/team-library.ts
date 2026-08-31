@@ -7,6 +7,7 @@ import { app } from 'electron'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import {
   aggregateSkills,
+  parseInstructionTemplate,
   readSkillDir,
   scanInstalledSkills,
   scanMcpServers,
@@ -22,6 +23,7 @@ import type {
   TeamLibraryInstallRecord,
   TeamLibraryInitializeInput,
   TeamLibraryInitializeResult,
+  TeamLibraryInstruction,
   TeamLibraryManifest,
   TeamLibraryMcp,
   TeamLibraryMcpInstallRecord,
@@ -246,8 +248,16 @@ function normalizePolicy(value: unknown): TeamLibraryPolicy {
       })
     : []
   return {
-    required: { skills: stringList(required.skills), mcp: stringList(required.mcp) },
-    recommended: { skills: stringList(recommended.skills), mcp: stringList(recommended.mcp) },
+    required: {
+      skills: stringList(required.skills),
+      mcp: stringList(required.mcp),
+      instructions: stringList(required.instructions),
+    },
+    recommended: {
+      skills: stringList(recommended.skills),
+      mcp: stringList(recommended.mcp),
+      instructions: stringList(recommended.instructions),
+    },
     blocked,
   }
 }
@@ -400,7 +410,7 @@ export async function initializeTeamLibrary(
       teams: [],
     }
     await fs.mkdir(join(root, 'policies'), { recursive: true })
-    await Promise.all(['skills', 'mcp', 'bundles'].map(async (directory) => {
+    await Promise.all(['skills', 'mcp', 'bundles', 'instructions'].map(async (directory) => {
       const path = join(root, directory)
       await fs.mkdir(path, { recursive: true })
       await fs.writeFile(join(path, '.gitkeep'), '', 'utf8')
@@ -418,15 +428,15 @@ export async function initializeTeamLibrary(
     await fs.writeFile(
       join(root, 'policies', 'organization.yaml'),
       stringifyYaml({
-        required: { skills: [], mcp: [] },
-        recommended: { skills: [], mcp: [] },
+        required: { skills: [], mcp: [], instructions: [] },
+        recommended: { skills: [], mcp: [], instructions: [] },
         blocked: [],
       }),
       'utf8',
     )
     await fs.writeFile(
       join(root, 'README.md'),
-      `# ${name}\n\n此仓库由 SkillBuddy 初始化，用于管理团队 Skills、MCP、岗位包和策略。\n`,
+      `# ${name}\n\n此仓库由 SkillBuddy 初始化，用于管理团队 Skills、MCP、项目指令模板、岗位包和策略。\n`,
       'utf8',
     )
     const userName = await git(root, ['config', 'user.name'], 5_000, '团队库初始化').catch(() => '')
@@ -436,7 +446,7 @@ export async function initializeTeamLibrary(
       await git(root, ['config', 'user.email', 'skillbuddy@localhost'], 5_000, '团队库初始化')
     }
     await git(root, ['add', '--all'], 30_000, '团队库初始化')
-    await git(root, ['commit', '-m', 'chore: 初始化团队库'], 30_000, '团队库初始化')
+    await git(root, ['commit', '-m', 'chore: initialize team library'], 30_000, '团队库初始化')
     await git(
       root,
       ['push', '--set-upstream', 'origin', config.branch],
@@ -573,6 +583,40 @@ async function listMcp(root: string, config: ResolvedTeamLibraryConfig, revision
   return results.sort((left, right) => left.name.localeCompare(right.name))
 }
 
+async function listInstructions(
+  root: string,
+  config: ResolvedTeamLibraryConfig,
+  revision: string,
+): Promise<TeamLibraryInstruction[]> {
+  const instructionsRoot = join(root, 'instructions')
+  const entries = await fs.readdir(instructionsRoot, { withFileTypes: true }).catch(() => [])
+  const results: TeamLibraryInstruction[] = []
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+    const path = `instructions/${entry.name}`
+    try {
+      const template = parseInstructionTemplate(
+        await fs.readFile(join(instructionsRoot, entry.name), 'utf8'),
+        basename(entry.name, '.md'),
+      )
+      results.push({
+        ...sourceInfo(config, revision, path),
+        type: 'instruction',
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        version: template.version,
+        target: template.target,
+        contentHash: template.contentHash,
+        content: template.content,
+      })
+    } catch {
+      /** 单个无效指令模板不影响其他团队资源进入目录。 */
+    }
+  }
+  return results.sort((left, right) => left.name.localeCompare(right.name))
+}
+
 async function listBundles(
   root: string,
   config: ResolvedTeamLibraryConfig,
@@ -651,9 +695,10 @@ export async function catalogFromTeamLibraryRoot(
 ): Promise<TeamLibraryCatalog> {
   const policySet = await loadPolicySet(root)
   const resolved = resolveTeamLibrary(config, policySet.manifest)
-  const [skills, mcpServers] = await Promise.all([
+  const [skills, mcpServers, instructions] = await Promise.all([
     listSkills(root, resolved, revision),
     listMcp(root, resolved, revision),
+    listInstructions(root, resolved, revision),
   ])
   const bundles = await listBundles(root, resolved, revision, skills, mcpServers)
   return {
@@ -661,6 +706,7 @@ export async function catalogFromTeamLibraryRoot(
     syncedAt,
     skills: skills.map(({ content: _content, resourcePaths: _resources, ...skill }) => skill),
     mcpServers: mcpServers.map(({ definition: _definition, ...server }) => server),
+    instructions: instructions.map(({ content: _content, ...instruction }) => instruction),
     bundles,
     manifest: policySet.manifest,
     policy: policySet.policy,
@@ -733,6 +779,20 @@ export async function getTeamLibraryMcp(input: TeamLibraryConfig, path: string):
   const resolved = resolveTeamLibrary(config, await readTeamLibraryManifest(root))
   const item = (await listMcp(root, resolved, state.revision)).find((server) => server.path === path)
   if (!item) throw new Error(`MCP Server 不存在：${path}`)
+  return item
+}
+
+/** 按需读取单个指令模板的完整正文；目录为控制体积不携带正文。 */
+export async function getTeamLibraryInstruction(
+  input: TeamLibraryConfig,
+  path: string,
+): Promise<TeamLibraryInstruction> {
+  const config = validateTeamLibraryConfig(input)
+  const state = await readState(config)
+  const root = teamLibraryRepositoryRoot(config)
+  const resolved = resolveTeamLibrary(config, await readTeamLibraryManifest(root))
+  const item = (await listInstructions(root, resolved, state.revision)).find((entry) => entry.path === path)
+  if (!item) throw new Error(`指令模板不存在：${path}`)
   return item
 }
 

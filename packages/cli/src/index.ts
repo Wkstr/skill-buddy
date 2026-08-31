@@ -22,6 +22,7 @@ import {
   type McpTarget,
   type Skill,
 } from '@skillbuddy/core'
+import { checkProjectInstructions } from './instructions-check.js'
 
 interface Config {
   registry?: string
@@ -335,6 +336,31 @@ bundle
       )
       await installMcpToTargets(definition, parseMcpTargets(opts.mcpTargets!, opts.project))
     }
+  })
+
+const instructions = program.command('instructions').description('Validate project instruction governance')
+
+instructions
+  .command('check')
+  .description('Check project instructions against a local team-library checkout')
+  .requiredOption('--project <path>', 'project root containing .skillbuddy/team.yaml')
+  .requiredOption('--library <path>', 'local team-library checkout')
+  .option('--json', 'machine-readable output')
+  .action(async (opts: { project: string; library: string; json?: boolean }) => {
+    const result = await checkProjectInstructions({
+      projectRoot: opts.project,
+      libraryRoot: opts.library,
+    })
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      for (const item of result.items) {
+        const prefix = item.state === 'satisfied' ? 'PASS' : item.recommended ? 'WARN' : 'FAIL'
+        console.log(`${prefix} ${item.ref} ${item.target ?? ''} [${item.state}]`.trim())
+      }
+      console.log(result.compliant ? 'instruction policy satisfied' : 'instruction policy failed')
+    }
+    if (!result.compliant) process.exitCode = 1
   })
 
 program

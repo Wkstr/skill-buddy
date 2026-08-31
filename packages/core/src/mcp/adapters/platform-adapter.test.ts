@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { INITIAL_MCP_PROFILES } from '../catalog.js'
+import { tomlMcpConfigCodec } from '../codecs/index.js'
 import { PlatformMcpAdapter } from './platform-adapter.js'
 
 const temporaryDirectories: string[] = []
@@ -148,5 +149,55 @@ describe('PlatformMcpAdapter', () => {
 
     const remove = await adapter.prepareRemove('database', target)
     expect(remove.afterText).not.toContain('[mcp_servers.database]')
+  })
+
+  it('writes a Codex env secret into the selected installation config', async () => {
+    const home = await temporaryHome()
+    const adapter = new PlatformMcpAdapter(profile('codex'), home)
+    const sourcePath = join(home, '.codex', 'config.toml')
+    await write(
+      sourcePath,
+      '[mcp_servers.database]\ncommand = "node"\nargs = ["server.js"]\nenv_vars = ["DATABASE_URL"]\ntool_timeout_sec = 45\n',
+    )
+    const source = (await adapter.configSources()).find(
+      (candidate) => candidate.configPath === sourcePath,
+    )!
+    const installation = (await adapter.read(source))[0]!
+
+    const prepared = await adapter.prepareSetSecret(
+      installation,
+      'DATABASE_URL',
+      'postgres://local-secret',
+    )
+
+    expect(prepared.afterText).toContain('DATABASE_URL = "postgres://local-secret"')
+    expect(prepared.afterText).not.toContain('env_vars')
+    expect(prepared.afterText).toContain('tool_timeout_sec = 45')
+  })
+
+  it('writes a Codex remote Header secret without retaining the env reference', async () => {
+    const home = await temporaryHome()
+    const adapter = new PlatformMcpAdapter(profile('codex'), home)
+    const sourcePath = join(home, '.codex', 'config.toml')
+    await write(
+      sourcePath,
+      '[mcp_servers.remote]\nurl = "https://example.invalid/mcp"\n\n[mcp_servers.remote.env_http_headers]\nAuthorization = "REMOTE_TOKEN"\n',
+    )
+    const source = (await adapter.configSources()).find(
+      (candidate) => candidate.configPath === sourcePath,
+    )!
+    const installation = (await adapter.read(source))[0]!
+
+    const prepared = await adapter.prepareSetSecret(
+      installation,
+      'REMOTE_TOKEN',
+      'Bearer local-secret',
+    )
+
+    const servers = tomlMcpConfigCodec.readServers(prepared.afterText, ['mcp_servers'])
+    expect(servers.remote).toMatchObject({
+      http_headers: { Authorization: 'Bearer local-secret' },
+    })
+    expect(prepared.afterText).not.toContain('env_http_headers')
   })
 })

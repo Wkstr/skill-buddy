@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Boxes, FolderGit2, GitBranch, PackageCheck, RefreshCw, ServerCog, Settings2, Sparkles, Users } from '@lucide/vue'
+import { Boxes, FileCog, FolderGit2, GitBranch, PackageCheck, RefreshCw, ServerCog, Settings2, Sparkles, Users } from '@lucide/vue'
 import GitTeamMcpCatalog from '@/components/team/GitTeamMcpCatalog.vue'
+import GitTeamInstructionCatalog from '@/components/team/GitTeamInstructionCatalog.vue'
 import GitTeamSkillCatalog from '@/components/team/GitTeamSkillCatalog.vue'
 import GitTeamBundleCatalog from '@/components/team/GitTeamBundleCatalog.vue'
 import TeamPolicyOverview from '@/components/team/TeamPolicyOverview.vue'
@@ -18,7 +19,7 @@ const { catalogs, loading, warnings, errors, compliance, syncAll } = useTeamLibr
 const { t } = useI18n()
 
 const configured = computed(() => teamLibraries.value.length > 0)
-const activeTab = shallowRef<'bundles' | 'skills' | 'mcp' | 'projects' | 'manage'>('bundles')
+const activeTab = shallowRef<'bundles' | 'skills' | 'mcp' | 'instructions' | 'projects' | 'manage'>('bundles')
 const noticeEntries = computed(() => [
   ...Object.entries(warnings.value).map(([id, message]) => ({ id, message, warning: true })),
   ...Object.entries(errors.value).map(([id, message]) => ({ id, message, warning: false })),
@@ -80,7 +81,7 @@ async function refreshTeam(): Promise<void> {
         <span class="flex-1">{{ t('team.noResourcesHint') }}</span>
         <Button variant="outline" size="sm" class="cursor-pointer" @click="activeTab = 'manage'">{{ t('team.openManagement') }}</Button>
       </div>
-      <div class="grid w-full grid-cols-5 items-center rounded-md bg-muted p-1" role="tablist">
+      <div class="grid w-full grid-cols-3 items-center rounded-md bg-muted p-1 sm:grid-cols-6" role="tablist">
         <button
           type="button"
           role="tab"
@@ -123,6 +124,19 @@ async function refreshTeam(): Promise<void> {
         <button
           type="button"
           role="tab"
+          :aria-selected="activeTab === 'instructions'"
+          :class="[
+            'flex min-w-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded px-3 py-1.5 text-sm transition-colors',
+            activeTab === 'instructions' ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground',
+          ]"
+          @click="activeTab = 'instructions'"
+        >
+          <FileCog class="size-4" />
+          {{ t('team.instructionsTab') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
           :aria-selected="activeTab === 'projects'"
           :class="[
             'flex min-w-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded px-3 py-1.5 text-sm transition-colors',
@@ -151,6 +165,10 @@ async function refreshTeam(): Promise<void> {
       <GitTeamBundleCatalog v-if="activeTab === 'bundles'" />
       <GitTeamSkillCatalog v-else-if="activeTab === 'skills'" />
       <GitTeamMcpCatalog v-else-if="activeTab === 'mcp'" />
+      <GitTeamInstructionCatalog
+        v-else-if="activeTab === 'instructions'"
+        @manage="activeTab = 'manage'"
+      />
       <TeamProjectInstallPanel v-else-if="activeTab === 'projects'" :catalogs="catalogs" />
       <TeamLibraryManagementPanel v-else-if="activeTab === 'manage'" />
     </template>

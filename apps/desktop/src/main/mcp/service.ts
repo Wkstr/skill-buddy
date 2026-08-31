@@ -21,9 +21,11 @@ import {
 } from '@skillbuddy/core'
 import type {
   McpRemovePlanRequest,
+  McpSetSecretRequest,
   McpTogglePlanRequest,
   McpUpsertPlanRequest,
 } from '#shared/ipc'
+import { isMcpCredentialName } from '#shared/mcp-credentials'
 import { McpBackupStore } from './backups'
 import { McpPathAccessPolicy } from './path-policy'
 import { McpConfigWatcher } from './watcher'
@@ -45,6 +47,8 @@ export interface McpServiceOptions {
 }
 
 const MAX_PROJECT_ROOTS = 64
+const MAX_SECRET_LENGTH = 64 * 1024
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /**
  * 净化 Renderer 传入的项目根目录：路径策略的写入白名单由此推导，
@@ -210,6 +214,43 @@ export class McpService {
     )
   }
 
+  async setSecret(request: McpSetSecretRequest): Promise<McpOperationRequestResult> {
+    if (typeof request?.secretName !== 'string' || !ENV_NAME.test(request.secretName)) {
+      throw new Error('MCP 密钥名称无效')
+    }
+    if (
+      typeof request.secretValue !== 'string' ||
+      !request.secretValue ||
+      request.secretValue.length > MAX_SECRET_LENGTH
+    ) {
+      throw new Error('MCP 密钥值为空或过长')
+    }
+    if (request.secretValue.includes('\0')) throw new Error('MCP 密钥值不能包含空字符')
+
+    const scan = await this.scan(request.projectRoots)
+    const installation = scan.installations.find((item) => item.id === request.installationId)
+    if (!installation) throw new Error('找不到待配置密钥的 MCP 安装')
+    if (!installation.definition.requiredSecrets.includes(request.secretName)) {
+      throw new Error(`MCP 安装不需要密钥 ${request.secretName}`)
+    }
+    if (!isMcpCredentialName(request.secretName)) {
+      throw new Error(`环境变量 ${request.secretName} 不是需要手动填写的凭据`)
+    }
+    // 必须按名称精确判断，不能用聚合的 authState：同一安装里只要有一个引用缺失，
+    // 整体就是 missing-secrets，按它放行会把已经生效的引用覆盖成明文。
+    if (!installation.missingSecrets.includes(request.secretName)) {
+      throw new Error(`凭据 ${request.secretName} 当前已有取值，无需填写`)
+    }
+    const target = targetOfSource(installation.source)
+    this.assertTargetProject(target)
+    const mutation = await this.getAdapter(target).prepareSetSecret(
+      installation,
+      request.secretName,
+      request.secretValue,
+    )
+    return this.applyMutations([mutation])
+  }
+
   async applyPlan(planId: string): Promise<McpOperationRequestResult> {
     const stored = this.#plans.get(planId)
     if (!stored || stored.view.expiresAt < Date.now()) {
@@ -219,9 +260,17 @@ export class McpService {
     if (stored.view.blockers.length > 0) throw new Error('MCP 操作计划包含阻断项')
     if (!stored.view.canApply) throw new Error('MCP 操作计划没有可执行的变更')
 
+    const result = await this.applyMutations(stored.mutations)
+    this.#plans.delete(planId)
+    return result
+  }
+
+  private async applyMutations(
+    mutations: McpPreparedMutation[],
+  ): Promise<McpOperationRequestResult> {
     const operationId = randomUUID()
     const results: McpOperationRequestResult['results'] = []
-    for (const mutation of stored.mutations) {
+    for (const mutation of mutations) {
       let backup: Awaited<ReturnType<McpBackupStore['stage']>> | undefined
       try {
         await this.#policy.assertWritable(mutation)
@@ -246,7 +295,6 @@ export class McpService {
         })
       }
     }
-    this.#plans.delete(planId)
     if (results.some((result) => result.ok)) this.#backups.expire(operationId, this.#backupTtl)
     return { operationId, results }
   }

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import type { GitBackupRequest } from '#shared/ipc'
-import { prepareGitRestore, pushGitBackup } from '../git-backup'
+import type { GitBackupRequest, GitInstructionRestoreRequest } from '#shared/ipc'
+import { prepareGitRestore, pushGitBackup, restoreGitInstructions } from '../git-backup'
 import type { PathAccessPolicy } from '../path-policy'
 
 /** 注册 Git 备份和恢复预览 IPC；实际恢复复用 Skills 安装链路。 */
@@ -10,5 +10,10 @@ export function registerBackupIpc(pathPolicy: PathAccessPolicy): void {
     'backup:prepare-restore',
     (_event, request: Pick<GitBackupRequest, 'remoteUrl' | 'branch'>) =>
       prepareGitRestore(request, pathPolicy),
+  )
+  ipcMain.handle(
+    'backup:restore-instructions',
+    (_event, request: GitInstructionRestoreRequest) =>
+      restoreGitInstructions(request, pathPolicy),
   )
 }

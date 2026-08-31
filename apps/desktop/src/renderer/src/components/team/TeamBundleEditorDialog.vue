@@ -69,7 +69,7 @@ function submit(): void {
             <div class="grid gap-4 sm:grid-cols-3">
               <label class="grid gap-1.5 text-sm font-medium">ID<Input v-model="form.id" placeholder="frontend-developer" /></label>
               <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formName') }}<Input v-model="form.name" :placeholder="t('team.bundleNamePh')" /></label>
-              <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" placeholder="1.0.0" /></label>
+              <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" :placeholder="t('team.formVersionPh')" /></label>
             </div>
             <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formDescription') }}<Input v-model="form.description" /></label>
             <div class="grid gap-4 lg:grid-cols-2">

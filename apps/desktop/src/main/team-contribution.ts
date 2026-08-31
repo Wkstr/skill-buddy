@@ -19,11 +19,16 @@ const WORKSPACE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f
 const WORKSPACE_METADATA_FILE = 'workspace.json'
 const workspaces = new Map<string, TeamContributionWorkspace>()
 
+/**
+ * @param preserveIndent - 保留 stdout 行首空白。`git status --porcelain` 的状态码是固定两列，
+ *   第一列为空时整行以空格开头，默认的 trim 会削掉它，令按位切割的路径整体错位一格。
+ */
 export async function runTeamContributionCommand(
   command: string,
   args: string[],
   cwd?: string,
   timeout = 120_000,
+  preserveIndent = false,
 ): Promise<string> {
   try {
     const result = await execFileAsync(command, args, {
@@ -32,7 +37,7 @@ export async function runTeamContributionCommand(
       maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     })
-    return result.stdout.trim()
+    return preserveIndent ? result.stdout.replace(/\s+$/, '') : result.stdout.trim()
   } catch (error) {
     const stderr = typeof (error as { stderr?: unknown })?.stderr === 'string'
       ? (error as { stderr: string }).stderr
@@ -48,11 +53,55 @@ export async function runTeamContributionCommand(
   }
 }
 
-function providerOf(remoteUrl: string): TeamContributionWorkspace['provider'] {
-  const lower = remoteUrl.toLowerCase()
-  if (lower.includes('github')) return 'github'
-  if (lower.includes('gitlab')) return 'gitlab'
+/** 从远程地址判断代码托管平台，决定用 gh / glab 还是回退到网页创建 PR。 */
+export function providerOf(remoteUrl: string): TeamContributionWorkspace['provider'] {
+  const host = remoteHost(remoteUrl)
+  if (!host) return 'unsupported'
+  if (host === 'github.com' || host.endsWith('.github.com')) return 'github'
+  if (host === 'gitlab.com' || host.endsWith('.gitlab.com')) return 'gitlab'
+  if (host === 'gitee.com' || host.endsWith('.gitee.com')) return 'gitee'
+  // 自建实例按点分标签精确匹配，覆盖 gitlab.acme.com / github.acme.com / acme.ghe.com；
+  // gh 与 glab 都支持企业版主机，不匹配就等于白推一个永远不会被创建的 PR/MR 分支。
+  // 用标签而非子串，避免把 my-github-mirror.com 这类无关域名误判成 GitHub。
+  const labels = host.split('.')
+  if (labels.includes('gitlab')) return 'gitlab'
+  if (labels.includes('github') || labels.includes('ghe')) return 'github'
+  if (labels.includes('gitee')) return 'gitee'
   return 'unsupported'
+}
+
+/** 提取 HTTPS、SSH URL 和 scp 风格 Git 地址中的远程主机名。 */
+function remoteHost(remoteUrl: string): string {
+  const value = remoteUrl.trim()
+  if (!value.includes('://')) {
+    const scpMatch = value.match(/^(?:[^@/:]+@)?([^:/]+):/)
+    if (scpMatch?.[1]) return scpMatch[1].toLowerCase()
+  }
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/** 为 Gitee 生成已带源分支和目标分支的 Pull Request 创建地址。 */
+function giteePullRequestUrl(remoteUrl: string, branch: string, baseBranch: string): string | undefined {
+  const value = remoteUrl.trim()
+  const host = remoteHost(value)
+  if (!host) return undefined
+  const scpMatch = !value.includes('://')
+    ? value.match(/^(?:[^@/:]+@)?[^:/]+:(.+)$/)
+    : null
+  const repositoryPath = scpMatch?.[1] ?? (() => {
+    try {
+      return new URL(value).pathname
+    } catch {
+      return ''
+    }
+  })()
+  const normalizedPath = repositoryPath.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '')
+  if (!normalizedPath || normalizedPath.split('/').length < 2) return undefined
+  return `https://${host}/${normalizedPath}/pulls/new?source_branch=${encodeURIComponent(branch)}&target_branch=${encodeURIComponent(baseBranch)}`
 }
 
 function workspaceDirectory(id: string): string {
@@ -86,7 +135,7 @@ function parseWorkspaceMetadata(id: string, value: unknown): TeamContributionWor
     !baseBranch ||
     !baseRevision ||
     typeof item.createdAt !== 'number' || !Number.isFinite(item.createdAt) ||
-    (provider !== 'github' && provider !== 'gitlab' && provider !== 'unsupported')
+    (provider !== 'github' && provider !== 'gitlab' && provider !== 'gitee' && provider !== 'unsupported')
   ) {
     throw new Error('草稿元数据无效')
   }
@@ -210,6 +259,30 @@ async function assertNoSymlinks(root: string): Promise<void> {
   await walk(root)
 }
 
+/**
+ * 选一个远端尚未占用的草稿分支名。
+ *
+ * 每轮变更都会从最新主分支重新拉分支，若沿用上一轮已推送的同名分支，
+ * 两者没有共同历史，推送会以非快进被拒绝。这里在创建时就避让，
+ * 而不是等用户写完内容、点了发布才失败。
+ */
+async function availableContributionBranch(root: string, slug: string): Promise<string> {
+  const taken = new Set(
+    (await runTeamContributionCommand('git', ['ls-remote', '--heads', 'origin', `refs/heads/skillbuddy/${slug}*`], root)
+      .catch(() => ''))
+      .split('\n')
+      .map((line) => line.split('\t').at(-1)?.replace('refs/heads/', '').trim())
+      .filter((name): name is string => Boolean(name)),
+  )
+  const base = `skillbuddy/${slug}`
+  if (!taken.has(base)) return base
+  for (let index = 2; index <= 99; index += 1) {
+    const candidate = `${base}-${index}`
+    if (!taken.has(candidate)) return candidate
+  }
+  throw new Error(`分支标识 ${slug} 的可用编号已用尽，请换一个标识`)
+}
+
 /** 创建独立 Git 分支工作区，供用户编辑后提交 PR/MR。 */
 export async function prepareTeamContribution(
   input: TeamLibraryConfig,
@@ -236,7 +309,7 @@ export async function prepareTeamContribution(
     await assertNoSymlinks(root)
     const manifest = await readTeamLibraryManifest(root)
     const baseRevision = await runTeamContributionCommand('git', ['rev-parse', 'HEAD'], root)
-    const branch = `skillbuddy/${slug}`
+    const branch = await availableContributionBranch(root, slug)
     await runTeamContributionCommand('git', ['checkout', '-b', branch], root)
     const result: TeamContributionWorkspace = {
       id,
@@ -270,7 +343,7 @@ export async function discardTeamContribution(id: string): Promise<void> {
   await fs.rm(workspaceDirectory(id), { recursive: true, force: true })
 }
 
-/** 提交并推送贡献分支，然后通过 gh 或 glab 创建 PR/MR。 */
+/** 提交并推送贡献分支，再按远程平台创建或打开 PR/MR。 */
 export async function publishTeamContribution(
   id: string,
   titleInput: string,
@@ -282,11 +355,6 @@ export async function publishTeamContribution(
   if (!title || title.length > 200) throw new Error('贡献标题不能为空且不能超过 200 个字符')
   if (body.length > 20_000) throw new Error('贡献说明不能超过 20000 个字符')
   if (!await runTeamContributionCommand('git', ['status', '--porcelain'], current.root)) throw new Error('贡献工作区没有待提交修改')
-  await runTeamContributionCommand('git', ['fetch', '--depth', '1', 'origin', current.baseBranch], current.root)
-  const remoteRevision = await runTeamContributionCommand('git', ['rev-parse', `origin/${current.baseBranch}`], current.root)
-  if (remoteRevision !== current.baseRevision) {
-    throw new Error('团队库主分支已经更新，请同步后创建新的变更分支，避免覆盖其他成员的修改')
-  }
   await runTeamContributionCommand('git', ['add', '--all'], current.root)
   await runTeamContributionCommand('git', ['commit', '-m', title], current.root)
   await runTeamContributionCommand('git', ['push', '--set-upstream', 'origin', current.branch], current.root)
@@ -295,7 +363,19 @@ export async function publishTeamContribution(
       pushed: true,
       provider: current.provider,
       branch: current.branch,
-      warning: '分支已推送，但当前远程地址无法识别为 GitHub 或 GitLab',
+      warning: '分支已推送，但当前远程地址无法识别为 GitHub、GitLab 或 Gitee',
+    }
+  }
+  if (current.provider === 'gitee') {
+    const url = giteePullRequestUrl(current.remoteUrl, current.branch, current.baseBranch)
+    return {
+      pushed: true,
+      provider: current.provider,
+      branch: current.branch,
+      ...(url ? { url } : {}),
+      warning: url
+        ? '分支已推送，请在 Gitee 页面确认并创建 Pull Request'
+        : '分支已推送，请在 Gitee 仓库页面手动创建 Pull Request',
     }
   }
   try {
@@ -355,7 +435,7 @@ function changedFileStatus(value: string): TeamContributionChangedFile['status']
 export async function teamContributionDiff(id: string): Promise<TeamContributionDiff> {
   const current = teamContributionWorkspace(id)
   await runTeamContributionCommand('git', ['add', '--intent-to-add', '--all'], current.root)
-  const status = await runTeamContributionCommand('git', ['status', '--porcelain'], current.root)
+  const status = await runTeamContributionCommand('git', ['status', '--porcelain'], current.root, 120_000, true)
   const files = status.split('\n').flatMap((line): TeamContributionChangedFile[] => {
     if (!line.trim()) return []
     const rawPath = line.slice(3).trim()

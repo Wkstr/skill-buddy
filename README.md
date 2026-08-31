@@ -82,8 +82,8 @@ The screenshots below show complete application windows and the main SkillBuddy 
 - **MCP discovery and change plans**: find MCP Servers, validate target capabilities, and preview exact writes.
 - **Presets and bundles**: save reusable Skill sets for batch installation, toggling, import, and export.
 - **Private Git backup**: back up user-level Skills and Presets, then preview restore operations on another device.
-- **Git team libraries**: manage reviewed Skills, MCP definitions, role bundles, and policies through protected branches and PRs/MRs.
-- **Project compliance**: declare project requirements in `.skillbuddy/team.yaml` and detect missing, outdated, blocked, or unresolved resources.
+- **Git team libraries**: manage reviewed Skills, MCP definitions, project instruction templates, role bundles, and policies through protected branches and PRs/MRs.
+- **Project compliance**: declare project requirements in `.skillbuddy/team.yaml` and detect missing, drifted, outdated, blocked, or unresolved resources.
 - **Custom platforms**: add another agent by configuring its detection, user, and project paths.
 - **Bilingual UI**: Simplified Chinese and English are built in.
 
@@ -104,7 +104,7 @@ SkillBuddy includes built-in Skill directory conventions for:
 | WorkBuddy | ✓ | - |
 | Doubao | ✓ | - |
 | Kimi Code | ✓ | ✓ |
-| Z Code | ✓ | ✓ |
+| ZCode | ✓ | ✓ |
 
 MCP formats, scopes, and capabilities vary by platform. SkillBuddy displays the detected configuration surfaces and validates every planned change before applying it. Some conventions still need broader real-device feedback; see [Platform conventions](docs/platform-conventions.md).
 

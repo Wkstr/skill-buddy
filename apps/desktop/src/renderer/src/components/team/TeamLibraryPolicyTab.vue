@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Boxes } from '@lucide/vue'
 import type { SelectOption } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,6 +78,24 @@ const canSave = computed(
           v-model="policy.recommendedMcp"
           rows="5"
           placeholder="mcp/slack.json"
+          class="resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+        />
+      </label>
+      <label class="grid gap-1.5 text-sm font-medium">
+        {{ t('team.policyRequiredInstructions') }}
+        <textarea
+          v-model="policy.requiredInstructions"
+          rows="5"
+          placeholder="instructions/engineering-baseline.md"
+          class="resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+        />
+      </label>
+      <label class="grid gap-1.5 text-sm font-medium">
+        {{ t('team.policyRecommendedInstructions') }}
+        <textarea
+          v-model="policy.recommendedInstructions"
+          rows="5"
+          placeholder="instructions/frontend-conventions.md"
           class="resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
         />
       </label>

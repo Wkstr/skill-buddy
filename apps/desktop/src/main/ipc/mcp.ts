@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import type {
   McpRemovePlanRequest,
+  McpSetSecretRequest,
   McpTogglePlanRequest,
   McpUpsertPlanRequest,
 } from '#shared/ipc'
@@ -21,6 +22,9 @@ export function registerMcpIpc(): McpService {
     service.createTogglePlan(request),
   )
   ipcMain.handle('mcp:apply-plan', (_event, planId: string) => service.applyPlan(planId))
+  ipcMain.handle('mcp:set-secret', (_event, request: McpSetSecretRequest) =>
+    service.setSecret(request),
+  )
   ipcMain.handle('mcp:restore', (_event, operationId: string) => service.restore(operationId))
   ipcMain.handle('mcp:watch-start', () =>
     service.watch(() => {

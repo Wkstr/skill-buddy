@@ -10,7 +10,7 @@ export interface ModeColors {
   background: string
   /** 前景（正文文字）色，#rrggbb */
   foreground: string
-  /** 界面对比度 0–100，50 为默认（影响卡片/边框等派生表面的深浅） */
+  /** 保留用于兼容旧主题配置；应用时固定为 50。 */
   contrast: number
 }
 
@@ -49,43 +49,43 @@ export const themePresets: ThemePreset[] = [
   {
     id: 'absolutely',
     labelKey: 'settings.appearancePresetAbsolutely',
-    light: { accent: '#d97757', background: '#fbfaf8', foreground: '#2f2b28', contrast: 48 },
-    dark: { accent: '#e38b6d', background: '#1c1917', foreground: '#f5f2ef', contrast: 55 },
+    light: { accent: '#d97757', background: '#fbfaf8', foreground: '#2f2b28', contrast: 50 },
+    dark: { accent: '#e38b6d', background: '#1c1917', foreground: '#f5f2ef', contrast: 50 },
   },
   {
     id: 'azure',
     labelKey: 'settings.appearancePresetAzure',
     light: { accent: '#2563eb', background: '#ffffff', foreground: '#1f2328', contrast: 50 },
-    dark: { accent: '#339cff', background: '#181818', foreground: '#ffffff', contrast: 60 },
+    dark: { accent: '#339cff', background: '#181818', foreground: '#ffffff', contrast: 50 },
   },
   {
     id: 'cappuccino',
     labelKey: 'settings.appearancePresetCappuccino',
-    light: { accent: '#7c3aed', background: '#faf7f2', foreground: '#2d2830', contrast: 48 },
-    dark: { accent: '#c4a7e7', background: '#191724', foreground: '#e0def4', contrast: 55 },
+    light: { accent: '#7c3aed', background: '#faf7f2', foreground: '#2d2830', contrast: 50 },
+    dark: { accent: '#c4a7e7', background: '#191724', foreground: '#e0def4', contrast: 50 },
   },
   {
     id: 'everforest',
     labelKey: 'settings.appearancePresetEverforest',
-    light: { accent: '#7f9d55', background: '#fdf6e3', foreground: '#3a4439', contrast: 48 },
-    dark: { accent: '#a7c080', background: '#2d353b', foreground: '#d3c6aa', contrast: 52 },
+    light: { accent: '#7f9d55', background: '#fdf6e3', foreground: '#3a4439', contrast: 50 },
+    dark: { accent: '#a7c080', background: '#2d353b', foreground: '#d3c6aa', contrast: 50 },
   },
   {
     id: 'linear',
     labelKey: 'settings.appearancePresetLinear',
-    light: { accent: '#5e6ad2', background: '#f7f8fa', foreground: '#1f2028', contrast: 52 },
-    dark: { accent: '#8a8fef', background: '#17171b', foreground: '#f1f1f3', contrast: 58 },
+    light: { accent: '#5e6ad2', background: '#f7f8fa', foreground: '#1f2028', contrast: 50 },
+    dark: { accent: '#8a8fef', background: '#17171b', foreground: '#f1f1f3', contrast: 50 },
   },
   {
     id: 'midnight',
     labelKey: 'settings.appearancePresetMidnight',
-    light: { accent: '#0969da', background: '#f6f8fa', foreground: '#1f2328', contrast: 55 },
-    dark: { accent: '#58a6ff', background: '#0d1117', foreground: '#e6edf3', contrast: 55 },
+    light: { accent: '#0969da', background: '#f6f8fa', foreground: '#1f2328', contrast: 50 },
+    dark: { accent: '#58a6ff', background: '#0d1117', foreground: '#e6edf3', contrast: 50 },
   },
   {
     id: 'notion',
     labelKey: 'settings.appearancePresetNotion',
-    light: { accent: '#2383e2', background: '#ffffff', foreground: '#37352f', contrast: 43 },
+    light: { accent: '#2383e2', background: '#ffffff', foreground: '#37352f', contrast: 50 },
     dark: { accent: '#529cca', background: '#191919', foreground: '#f1f1ef', contrast: 50 },
   },
 ]
@@ -96,10 +96,7 @@ function sanitizeModeColors(input: unknown, fallback: ModeColors): ModeColors {
   const raw = (input ?? {}) as Partial<Record<keyof ModeColors, unknown>>
   const color = (v: unknown, d: string): string =>
     typeof v === 'string' && hexPattern.test(v) ? v.toLowerCase() : d
-  const contrast =
-    typeof raw.contrast === 'number' && Number.isFinite(raw.contrast)
-      ? Math.min(100, Math.max(0, Math.round(raw.contrast)))
-      : fallback.contrast
+  const contrast = 50
   return {
     accent: color(raw.accent, fallback.accent),
     background: color(raw.background, fallback.background),
@@ -223,17 +220,13 @@ export function applyAppearance(dark: boolean): void {
   }
 
   if (
-    colors.background !== base.background ||
-    colors.foreground !== base.foreground ||
-    colors.contrast !== base.contrast
+    colors.background !== base.background || colors.foreground !== base.foreground
   ) {
     const { background: bg, foreground: fg } = colors
-    const factor = Math.max(0.15, colors.contrast / 50)
     // 混色用 sRGB：oklch 对蓝色系前景在提亮降饱和时感知会向紫偏
     const mix = (percent: number): string =>
-      `color-mix(in srgb, ${bg}, ${fg} ${Math.min(85, percent * factor).toFixed(1)}%)`
-    // 各表面相对背景向前景靠拢的基准百分比（contrast=50 时与 main.css 的
-    // oklch 默认值近似一致），对比度滑块整体缩放这些百分比。
+      `color-mix(in srgb, ${bg}, ${fg} ${percent.toFixed(1)}%)`
+    // 各表面相对背景向前景靠拢的基准百分比。
     const surfaces = dark
       ? { card: 4, secondary: 10.5, muted: 8.5, accent: 11.5, border: 13 }
       : { card: 2, secondary: 4.8, muted: 3.5, accent: 5.6, border: 10.5 }
@@ -257,7 +250,9 @@ export function applyAppearance(dark: boolean): void {
   for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value)
 
   // vibrancy 材质只在 macOS 存在；关闭后侧边栏回到不透明的 muted 底色
-  root.classList.toggle('vibrancy', isMac && appearance.value.translucentSidebar)
+  const vibrancyEnabled = isMac && appearance.value.translucentSidebar
+  root.classList.toggle('vibrancy', vibrancyEnabled)
+  void window.skillsManager?.setWindowVibrancy(vibrancyEnabled)
 }
 
 /** 将实际生效的页面背景和前景色同步给 Windows 原生标题栏。 */

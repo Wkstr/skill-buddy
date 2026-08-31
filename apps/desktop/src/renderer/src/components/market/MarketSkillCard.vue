@@ -24,7 +24,7 @@ const { t } = useI18n()
 
 <template>
   <div
-    class="group flex h-full cursor-pointer flex-col rounded-2xl border bg-card px-3.5 py-3.5 transition-colors hover:border-foreground/25"
+    class="group flex h-full cursor-pointer flex-col rounded-xl border bg-card px-3.5 py-3.5 transition-colors hover:border-foreground/25"
     role="button"
     tabindex="0"
     @click="emit('open')"

@@ -93,6 +93,12 @@ export function setWindowChromeTheme(colors: WindowThemeColors): void {
   mainWindow?.setTitleBarOverlay(getTitleBarOverlayOptions(colors))
 }
 
+/** 切换 macOS 原生窗口材质；其他平台不支持 vibrancy 时保持无操作。 */
+export function setWindowVibrancy(enabled: boolean): void {
+  if (process.platform !== 'darwin') return
+  mainWindow?.setVibrancy(enabled ? 'sidebar' : null)
+}
+
 /** 显示、恢复并聚焦主窗口。 */
 export function showMainWindow(): void {
   const window = mainWindow ?? createWindow()

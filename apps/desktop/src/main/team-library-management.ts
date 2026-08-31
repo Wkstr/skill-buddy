@@ -2,6 +2,9 @@ import { promises as fs } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import {
+  normalizeInstructionTemplateContent,
+  normalizeInstructionTemplateTarget,
+  parseInstructionTemplate,
   readSkillDir,
   validateMcpDefinition,
 } from '@skillbuddy/core'
@@ -9,6 +12,7 @@ import type {
   TeamContributionDiff,
   TeamLibraryBundleDraft,
   TeamLibraryCatalog,
+  TeamLibraryInstructionDraft,
   TeamLibraryMcpDraft,
   TeamLibraryMutationResult,
   TeamLibraryPolicy,
@@ -51,6 +55,12 @@ function assertText(value: string, label: string, max = MAX_CONTENT): string {
   if (text.length > max) throw new Error(`${label}不能超过 ${max} 个字符`)
   if (text.includes('\0')) throw new Error(`${label}包含无效字符`)
   return text
+}
+
+function normalizedRefs(values: unknown): string[] {
+  return Array.isArray(values)
+    ? [...new Set(values.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean))]
+    : []
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -196,6 +206,35 @@ async function writeMcpFile(
   return { path, affectedBundles }
 }
 
+async function writeInstructionFile(
+  root: string,
+  input: TeamLibraryInstructionDraft,
+): Promise<TeamLibraryMutationResult> {
+  const id = assertName(input.id, '指令模板 ID')
+  const name = assertText(input.name, '指令模板名称', 200)
+  const description = assertText(input.description || '团队共享项目指令', '指令模板描述', 2_000)
+  const targetName = normalizeInstructionTemplateTarget(input.target)
+  const content = normalizeInstructionTemplateContent(input.content)
+  const originalPath = input.originalPath ? relativePath(root, input.originalPath) : undefined
+  if (originalPath && !/^instructions\/[^/]+\.md$/.test(originalPath)) {
+    throw new Error('指令模板原路径无效')
+  }
+  const path = `instructions/${id}.md`
+  const target = join(root, path)
+  const source = originalPath ? resolve(root, originalPath) : target
+  if (source !== target && await exists(target)) throw new Error(`指令模板已存在：${id}`)
+  await fs.mkdir(dirname(target), { recursive: true })
+  const metadata: Record<string, unknown> = { id, name, description, target: targetName }
+  if (input.version?.trim()) metadata.version = input.version.trim()
+  await fs.writeFile(
+    target,
+    `---\n${stringifyYaml(metadata).trim()}\n---\n\n${content}`,
+    'utf8',
+  )
+  if (source !== target) await fs.rm(source, { force: true })
+  return { path, affectedBundles: [] }
+}
+
 /** 读取当前变更草稿中的 MCP Server 编辑数据。 */
 export async function getTeamContributionMcp(
   workspaceId: string,
@@ -216,6 +255,29 @@ export async function getTeamContributionMcp(
       ? wrapper.description
       : definition.description ?? '',
     definition,
+  }
+}
+
+/** 读取当前变更草稿中的项目指令模板。 */
+export async function getTeamContributionInstruction(
+  workspaceId: string,
+  pathInput: string,
+): Promise<TeamLibraryInstructionDraft> {
+  const root = teamContributionRoot(workspaceId)
+  const path = relativePath(root, pathInput)
+  if (!/^instructions\/[^/]+\.md$/.test(path)) throw new Error('指令模板路径无效')
+  const template = parseInstructionTemplate(
+    await fs.readFile(resolve(root, path), 'utf8'),
+    basename(path, '.md'),
+  )
+  return {
+    originalPath: path,
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    version: template.version,
+    target: template.target,
+    content: template.content,
   }
 }
 
@@ -270,6 +332,13 @@ export async function upsertTeamMcp(workspaceId: string, input: TeamLibraryMcpDr
   return writeMcpFile(teamContributionRoot(workspaceId), input)
 }
 
+export async function upsertTeamInstruction(
+  workspaceId: string,
+  input: TeamLibraryInstructionDraft,
+): Promise<TeamLibraryMutationResult> {
+  return writeInstructionFile(teamContributionRoot(workspaceId), input)
+}
+
 export async function upsertTeamBundle(workspaceId: string, input: TeamLibraryBundleDraft): Promise<TeamLibraryMutationResult> {
   const catalog = await teamContributionCatalog(workspaceId)
   const skillPaths = new Set(catalog.skills.map((item) => item.path))
@@ -288,7 +357,7 @@ export async function deleteTeamResource(
 ): Promise<TeamLibraryMutationResult> {
   const root = teamContributionRoot(workspaceId)
   const path = relativePath(root, pathInput)
-  if (!/^(?:skills\/[^/]+|mcp\/[^/]+\.json|bundles\/[^/]+\.json)$/.test(path)) {
+  if (!/^(?:skills\/[^/]+|mcp\/[^/]+\.json|bundles\/[^/]+\.json|instructions\/[^/]+\.md)$/.test(path)) {
     throw new Error('只能删除团队库资源文件')
   }
   const affectedBundles: string[] = []
@@ -316,12 +385,14 @@ export async function deleteTeamResource(
 function normalizePolicy(value: TeamLibraryPolicy): TeamLibraryPolicy {
   return {
     required: {
-      skills: [...new Set(value.required.skills.map((item) => item.trim()).filter(Boolean))],
-      mcp: [...new Set(value.required.mcp.map((item) => item.trim()).filter(Boolean))],
+      skills: normalizedRefs(value.required.skills),
+      mcp: normalizedRefs(value.required.mcp),
+      instructions: normalizedRefs(value.required.instructions),
     },
     recommended: {
-      skills: [...new Set(value.recommended.skills.map((item) => item.trim()).filter(Boolean))],
-      mcp: [...new Set(value.recommended.mcp.map((item) => item.trim()).filter(Boolean))],
+      skills: normalizedRefs(value.recommended.skills),
+      mcp: normalizedRefs(value.recommended.mcp),
+      instructions: normalizedRefs(value.recommended.instructions),
     },
     blocked: value.blocked.map((item) => ({
       ref: assertText(item.ref, '禁用资源引用', 500),
@@ -468,6 +539,24 @@ export async function validateTeamLibraryWorkspace(workspaceId: string): Promise
       if (mcpNames.has(definition.name)) throw new Error(`MCP Server 名称重复：${definition.name}`)
       mcpNames.add(definition.name)
       mcpPaths.add(path)
+    } catch (error) {
+      issues.push({ path, message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  const instructionIds = new Set<string>()
+  const instructionEntries = await fs.readdir(join(root, 'instructions'), { withFileTypes: true }).catch(() => [])
+  for (const entry of instructionEntries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+    const path = `instructions/${entry.name}`
+    try {
+      const template = parseInstructionTemplate(
+        await fs.readFile(join(root, path), 'utf8'),
+        basename(entry.name, '.md'),
+      )
+      if (entry.name !== `${template.id}.md`) throw new Error(`文件名必须为 ${template.id}.md`)
+      if (instructionIds.has(template.id)) throw new Error(`指令模板 ID 重复：${template.id}`)
+      instructionIds.add(template.id)
     } catch (error) {
       issues.push({ path, message: error instanceof Error ? error.message : String(error) })
     }

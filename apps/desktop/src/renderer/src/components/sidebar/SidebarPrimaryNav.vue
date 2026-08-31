@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { Blocks, Layers, LayoutDashboard, ServerCog, Users } from '@lucide/vue'
+import { Blocks, FileCog, Layers, LayoutDashboard, ServerCog, Users } from '@lucide/vue'
 import type { WorkspaceView } from '@/lib/navigation'
 
 const props = defineProps<{
@@ -30,6 +30,17 @@ const { t } = useI18n()
   >
     <LayoutDashboard class="size-4 text-foreground/70" />
     {{ t('dashboard.title') }}
+  </button>
+  <button
+    type="button"
+    :class="[
+      'flex cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
+      props.view === 'instructions' ? 'nav-active' : 'hover:bg-accent/60',
+    ]"
+    @click="emit('navigate', 'instructions')"
+  >
+    <FileCog class="size-4 text-foreground/70" />
+    {{ t('instructions.title') }}
   </button>
   <button
     type="button"
@@ -71,7 +82,10 @@ const { t } = useI18n()
       <ServerCog class="size-4 text-foreground/70" />
       {{ t('mcp.title') }}
     </span>
-    <span aria-hidden="true" class="text-sm tabular-nums text-muted-foreground">
+    <span
+      aria-hidden="true"
+      class="text-sm tabular-nums text-muted-foreground"
+    >
       {{ props.activeMcpServerCount }}
     </span>
   </button>

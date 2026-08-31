@@ -6,6 +6,7 @@ import type {
   TeamLibraryBundleDraft,
   TeamLibraryCatalog,
   TeamLibraryConfig,
+  TeamLibraryInstructionDraft,
   TeamLibraryMcpDraft,
   TeamLibraryMutationResult,
   TeamLibraryPolicyDraft,
@@ -124,6 +125,10 @@ function saveMcp(input: TeamLibraryMcpDraft): Promise<TeamLibraryMutationResult 
   return mutate((id) => window.skillsManager.teamContributionUpsertMcp(id, input))
 }
 
+function saveInstruction(input: TeamLibraryInstructionDraft): Promise<TeamLibraryMutationResult | null> {
+  return mutate((id) => window.skillsManager.teamContributionUpsertInstruction(id, input))
+}
+
 function saveBundle(input: TeamLibraryBundleDraft): Promise<TeamLibraryMutationResult | null> {
   return mutate((id) => window.skillsManager.teamContributionUpsertBundle(id, input))
 }
@@ -155,13 +160,25 @@ async function publish(title: string, body: string): Promise<TeamContributionPub
   error.value = null
   publishResult.value = null
   try {
-    publishResult.value = await window.skillsManager.teamContributionPublish(
+    const result = await window.skillsManager.teamContributionPublish(
       workspace.value.id,
       title,
       body,
     )
-    await refreshDraft()
-    return publishResult.value
+    /**
+     * PR/MR 建好之后这一轮草稿就结束了：清掉工作区，下一次变更才会重新
+     * 基于最新主分支拉出新分支。留着它会让后续所有改动堆在这个越来越旧的
+     * 分支上，既撞不上最新基线，也会让第二次 PR 创建失败。
+     * 只保留发布结果，让用户仍能看到 PR/MR 链接。
+     */
+    if (result.pushed) {
+      await window.skillsManager.teamContributionDiscard(workspace.value.id).catch(() => undefined)
+      reset()
+    } else {
+      await refreshDraft()
+    }
+    publishResult.value = result
+    return result
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
     return null
@@ -212,6 +229,7 @@ export function useTeamLibraryManagement() {
     saveSkill,
     importSkill,
     saveMcp,
+    saveInstruction,
     saveBundle,
     savePolicy,
     remove,

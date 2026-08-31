@@ -83,20 +83,23 @@
 @layer components {
   /* macOS sidebar vibrancy: window material shows through the sidebar,
      while content surfaces stay opaque. */
-  .vibrancy body {
+  .vibrancy,
+  .vibrancy body,
+  .vibrancy #app {
     background: transparent;
   }
   .sidebar-surface {
-    @apply bg-muted/30;
+    background: var(--muted);
   }
   .vibrancy .sidebar-surface {
-    background: transparent;
+    background: color-mix(in srgb, var(--background) 58%, transparent);
+    backdrop-filter: blur(28px) saturate(140%);
   }
   .vibrancy:not(.dark) .sidebar-surface {
-    background: color-mix(in oklch, var(--background) 92%, transparent);
+    background: color-mix(in srgb, var(--background) 58%, transparent);
   }
   .dark.vibrancy .sidebar-surface {
-    background: color-mix(in oklch, var(--background) 92%, transparent);
+    background: color-mix(in srgb, var(--background) 58%, transparent);
   }
   .content-surface {
     @apply border-l bg-background;

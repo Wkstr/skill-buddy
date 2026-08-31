@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, shallowRef, watch } from 'vue'
+import { computed, reactive, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
 import { Button } from '@/components/ui/button'
@@ -43,6 +43,12 @@ watch(() => [props.open, props.initial], () => {
   if (props.open) reset()
 }, { immediate: true })
 
+/** 描述留空由主进程补默认值，这里只校验无法推导的字段。 */
+const missingFields = computed(() => [
+  ...(form.name.trim() ? [] : [t('team.formName')]),
+  ...(form.content.trim() ? [] : [t('team.skillContent')]),
+])
+
 function submit(): void {
   emit('save', {
     ...form,
@@ -66,7 +72,7 @@ function submit(): void {
         <form class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4" @submit.prevent="submit">
           <div class="grid gap-4 sm:grid-cols-2">
             <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formName') }}<Input v-model="form.name" placeholder="security-review" /></label>
-            <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" placeholder="1.0.0" /></label>
+            <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" :placeholder="t('team.formVersionPh')" /></label>
           </div>
           <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formDescription') }}<Input v-model="form.description" :placeholder="t('team.skillDescriptionPh')" /></label>
           <label class="grid gap-1.5 text-sm font-medium">
@@ -83,9 +89,15 @@ function submit(): void {
             />
           </label>
         </form>
-        <div class="flex justify-end gap-2 border-t px-5 py-4">
+        <div class="flex items-center justify-end gap-2 border-t px-5 py-4">
+          <p
+            v-if="missingFields.length"
+            class="mr-auto text-xs text-muted-foreground"
+          >
+            {{ t('team.formMissingFields', { fields: missingFields.join('、') }) }}
+          </p>
           <Button type="button" variant="ghost" size="sm" class="cursor-pointer" @click="emit('close')">{{ t('common.cancel') }}</Button>
-          <Button type="button" size="sm" class="cursor-pointer" :disabled="!form.name.trim() || !form.description.trim() || !form.content.trim()" :loading="busy" @click="submit">
+          <Button type="button" size="sm" class="cursor-pointer" :disabled="missingFields.length > 0" :loading="busy" @click="submit">
             {{ busy ? t('team.saving') : t('team.saveToChanges') }}
           </Button>
         </div>

@@ -67,6 +67,8 @@ export interface McpInstallation {
   source: McpConfigSource
   enabled: boolean | null
   authState: McpAuthState
+  /** 尚未取到值的引用名称；`authState` 是聚合结果，无法区分具体是哪几个缺失。 */
+  missingSecrets: string[]
   definitionHash: string
   sourceHash: string
   modifiedAt?: number

@@ -1,8 +1,10 @@
 import { computed, readonly, shallowRef, watch, type DeepReadonly } from 'vue'
 import type {
+  InstructionDocument,
   TeamLibraryBundleSummary,
   TeamLibraryCatalog,
   TeamLibraryInstallRecord,
+  TeamLibraryInstructionSummary,
   TeamLibraryMcpSummary,
   TeamLibrarySkillSummary,
   TeamLibraryPolicy,
@@ -14,7 +16,7 @@ import { useSettings } from './useSettings'
 import { useTeamLibraries } from './useTeamLibraries'
 import { setTeamProjectAttentionCount } from './useAttentionCounters'
 
-export type TeamProjectRequirementType = 'bundle' | 'skill' | 'mcp'
+export type TeamProjectRequirementType = 'bundle' | 'skill' | 'mcp' | 'instruction'
 export type TeamProjectRequirementState = 'satisfied' | 'missing' | 'outdated' | 'unresolved' | 'blocked'
 
 export interface TeamProjectRequirementStatus {
@@ -25,6 +27,18 @@ export interface TeamProjectRequirementStatus {
   reason?: 'unresolved-ref' | 'bundle-missing-members' | 'bundle-incomplete' | 'blocked-policy'
   detail?: number
   policyReason?: string
+  recommended?: boolean
+  /** 仅指令模板：可直接写入项目时携带定位信息，供“应用模板”使用。 */
+  template?: TeamProjectInstructionTemplateRef
+}
+
+export interface TeamProjectInstructionTemplateRef {
+  libraryId: string
+  templatePath: string
+  projectRoot: string
+  targetPath: string
+  /** 目标文件当前内容哈希；文件不存在时为 null。 */
+  expectedHash: string | null
 }
 
 export interface TeamProjectCompliance {
@@ -39,10 +53,12 @@ export interface TeamProjectCompliance {
   outdated: number
   unresolved: number
   blocked: number
+  recommended: number
 }
 
 const projectConfigs = shallowRef<TeamProjectConfigResult[]>([])
 const loading = shallowRef(false)
+const instructionDocuments = shallowRef<InstructionDocument[]>([])
 let initialized = false
 let attentionCountWired = false
 
@@ -69,10 +85,12 @@ function qualifyPolicy(policy: DeepReadonly<TeamLibraryPolicy>, libraryId: strin
     required: {
       skills: policy.required.skills.map((ref) => qualifiedRef(libraryId, ref)),
       mcp: policy.required.mcp.map((ref) => qualifiedRef(libraryId, ref)),
+      instructions: policy.required.instructions.map((ref) => qualifiedRef(libraryId, ref)),
     },
     recommended: {
       skills: policy.recommended.skills.map((ref) => qualifiedRef(libraryId, ref)),
       mcp: policy.recommended.mcp.map((ref) => qualifiedRef(libraryId, ref)),
+      instructions: policy.recommended.instructions.map((ref) => qualifiedRef(libraryId, ref)),
     },
     blocked: policy.blocked.map((item) => ({
       ...item,
@@ -117,6 +135,7 @@ interface ComplianceIndexes {
   skills: ResourceIndex<TeamLibrarySkillSummary>
   mcpServers: ResourceIndex<TeamLibraryMcpSummary>
   bundles: ResourceIndex<TeamLibraryBundleSummary>
+  instructions: ResourceIndex<TeamLibraryInstructionSummary>
   installations: Map<string, TeamLibraryInstallRecord[]>
 }
 
@@ -166,18 +185,23 @@ function buildComplianceIndexes(
   skills: readonly TeamLibrarySkillSummary[],
   mcpServers: readonly TeamLibraryMcpSummary[],
   bundles: readonly TeamLibraryBundleSummary[],
+  instructions: readonly TeamLibraryInstructionSummary[],
   installations: readonly TeamLibraryInstallRecord[],
 ): ComplianceIndexes {
   const indexes: ComplianceIndexes = {
     skills: createResourceIndex(),
     mcpServers: createResourceIndex(),
     bundles: createResourceIndex(),
+    instructions: createResourceIndex(),
     installations: new Map(),
   }
   for (const item of skills) addResourceIndex(indexes.skills, item, [item.path, item.name])
   for (const item of mcpServers) addResourceIndex(indexes.mcpServers, item, [item.path, item.name])
   for (const item of bundles) {
     addResourceIndex(indexes.bundles, item, [item.id, item.path, item.name])
+  }
+  for (const item of instructions) {
+    addResourceIndex(indexes.instructions, item, [item.id, item.path, item.name])
   }
   for (const record of installations) {
     const projectRoot = record.target.projectRoot
@@ -191,6 +215,76 @@ function buildComplianceIndexes(
     indexes.installations.set(key, records)
   }
   return indexes
+}
+
+function instructionStatus(
+  ref: string,
+  config: TeamProjectConfig,
+  projectRoot: string,
+  indexes: ComplianceIndexes,
+  policy: TeamLibraryPolicy,
+  recommended = false,
+): TeamProjectRequirementStatus {
+  const resource = resolveIndexed(ref, config.library, indexes.instructions)
+  if (!resource) {
+    return {
+      type: 'instruction',
+      ref,
+      label: ref,
+      state: 'unresolved',
+      reason: 'unresolved-ref',
+      ...(recommended ? { recommended: true } : {}),
+    }
+  }
+  const policyReason = blockedTeamAssetReason(
+    policy,
+    `${resource.libraryId}:${resource.path}`,
+    resource.version,
+  )
+  if (policyReason) {
+    return {
+      type: 'instruction',
+      ref,
+      label: resource.name,
+      state: 'blocked',
+      reason: 'blocked-policy',
+      policyReason,
+      ...(recommended ? { recommended: true } : {}),
+    }
+  }
+  const targetPath = `${projectRoot.replace(/[\\/]$/, '')}/${resource.target.replaceAll('\\', '/')}`
+  const document = instructionDocuments.value.find((item) =>
+    normalizedPath(item.path) === normalizedPath(targetPath),
+  )
+  const state = !document
+    ? 'missing'
+    : document.contentHash === resource.contentHash
+      ? 'satisfied'
+      : 'outdated'
+  /**
+   * 只有可安全写入的目标才提供“应用模板”：链接文件、只读文件、超限文件
+   * 都交给指令页处理，避免在团队页给出一个必然被计划拦下的按钮。
+   */
+  const writable = !document
+    || (!document.linked && !document.readOnly && !document.contentTruncated && !document.encodingInvalid)
+  return {
+    type: 'instruction',
+    ref,
+    label: resource.name,
+    state,
+    ...(recommended ? { recommended: true } : {}),
+    ...(state !== 'satisfied' && writable
+      ? {
+          template: {
+            libraryId: resource.libraryId,
+            templatePath: resource.path,
+            projectRoot,
+            targetPath,
+            expectedHash: document?.contentHash ?? null,
+          },
+        }
+      : {}),
+  }
 }
 
 function resourceState(
@@ -307,9 +401,12 @@ async function refresh(): Promise<void> {
   const { projectRoots } = useSettings()
   loading.value = true
   try {
-    projectConfigs.value = await Promise.all(
-      projectRoots.value.map((root) => window.skillsManager.teamProjectConfig(root)),
-    )
+    const [configs, scan] = await Promise.all([
+      Promise.all(projectRoots.value.map((root) => window.skillsManager.teamProjectConfig(root))),
+      window.skillsManager.scanProjectInstructions({ projectRoots: [...projectRoots.value] }),
+    ])
+    projectConfigs.value = configs
+    instructionDocuments.value = scan.documents.filter((document) => document.scope === 'project')
   } finally {
     loading.value = false
   }
@@ -317,7 +414,7 @@ async function refresh(): Promise<void> {
 
 export function useTeamProjects() {
   const { projectRoots } = useSettings()
-  const { catalogs, bundles, skills, mcpServers, installations } = useTeamLibraries()
+  const { catalogs, bundles, skills, mcpServers, instructions, installations } = useTeamLibraries()
   if (!initialized) {
     initialized = true
     void refresh()
@@ -325,50 +422,78 @@ export function useTeamProjects() {
       () => [...projectRoots.value],
       () => void refresh(),
     )
+    window.skillsManager.onInstructionsChanged(() => void refresh())
   }
   const indexes = computed(() => buildComplianceIndexes(
     skills.value,
     mcpServers.value,
     bundles.value,
+    instructions.value,
     installations.value,
   ))
   const projects = computed<TeamProjectCompliance[]>(() => projectConfigs.value.map((result) => {
-    const policy = result.config ? effectivePolicy(result.config, catalogs.value) : emptyTeamPolicy()
-    const requirements = result.config
-      ? [
-          ...result.config.requires.bundles.map((ref) => bundleStatus(
-            ref,
-            result.config!,
-            result.projectRoot,
-            indexes.value,
-            policy,
-          )),
-          ...[...new Set([...result.config.requires.skills, ...policy.required.skills])].map((ref) => directStatus(
-            'skill',
-            ref,
-            result.config!,
-            result.projectRoot,
-            indexes.value,
-            policy,
-          )),
-          ...[...new Set([...result.config.requires.mcp, ...policy.required.mcp])].map((ref) => directStatus(
-            'mcp',
-            ref,
-            result.config!,
-            result.projectRoot,
-            indexes.value,
-            policy,
-          )),
-        ]
+    const config = result.config
+    const policy = config ? effectivePolicy(config, catalogs.value) : emptyTeamPolicy()
+    const requirements = config
+      ? (() => {
+          const requiredInstructions = [...new Set([
+            ...config.requires.instructions,
+            ...policy.required.instructions,
+          ])]
+          const recommendedInstructions = [...new Set(policy.recommended.instructions)]
+            .filter((ref) => !requiredInstructions.includes(ref))
+          return [
+            ...config.requires.bundles.map((ref) => bundleStatus(
+              ref,
+              config,
+              result.projectRoot,
+              indexes.value,
+              policy,
+            )),
+            ...[...new Set([...config.requires.skills, ...policy.required.skills])].map((ref) => directStatus(
+              'skill',
+              ref,
+              config,
+              result.projectRoot,
+              indexes.value,
+              policy,
+            )),
+            ...[...new Set([...config.requires.mcp, ...policy.required.mcp])].map((ref) => directStatus(
+              'mcp',
+              ref,
+              config,
+              result.projectRoot,
+              indexes.value,
+              policy,
+            )),
+            ...requiredInstructions.map((ref) => instructionStatus(
+              ref,
+              config,
+              result.projectRoot,
+              indexes.value,
+              policy,
+            )),
+            ...recommendedInstructions.map((ref) => instructionStatus(
+              ref,
+              config,
+              result.projectRoot,
+              indexes.value,
+              policy,
+              true,
+            )),
+          ]
+        })()
       : []
+    const requiredRequirements = requirements.filter((item) => !item.recommended)
     return {
       ...result,
       requirements,
-      satisfied: requirements.filter((item) => item.state === 'satisfied').length,
-      missing: requirements.filter((item) => item.state === 'missing').length,
-      outdated: requirements.filter((item) => item.state === 'outdated').length,
-      unresolved: requirements.filter((item) => item.state === 'unresolved').length,
-      blocked: requirements.filter((item) => item.state === 'blocked').length,
+      satisfied: requiredRequirements.filter((item) => item.state === 'satisfied').length,
+      missing: requiredRequirements.filter((item) => item.state === 'missing').length,
+      outdated: requiredRequirements.filter((item) => item.state === 'outdated').length,
+      unresolved: requiredRequirements.filter((item) => item.state === 'unresolved').length,
+      blocked: requiredRequirements.filter((item) => item.state === 'blocked').length,
+      recommended: requirements.filter((item) => item.recommended && item.state !== 'satisfied').length,
     }
   }))
   const attentionCount = computed(() => projects.value.reduce(

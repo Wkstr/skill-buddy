@@ -14,6 +14,7 @@ const emit = defineEmits<{
   openMarket: [item: MarketItem]
   openAttention: []
   openDrift: []
+  openInstructions: []
   newSkill: []
   importSkills: []
 }>()
@@ -78,6 +79,7 @@ const { count: todoCount } = useAttentionSummary()
       <DashboardPage
         @open-market="emit('openMarket', $event)"
         @open-drift="emit('openDrift')"
+        @open-instructions="emit('openInstructions')"
       />
     </ScrollArea>
   </div>

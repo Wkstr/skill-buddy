@@ -24,6 +24,8 @@ import type {
   McpConfigSource,
   McpInstallation,
   McpPlatformCapabilities,
+  McpServerDefinition,
+  McpValueRef,
 } from '../types.js'
 import {
   McpOperationError,
@@ -45,6 +47,101 @@ async function exists(path: string): Promise<boolean> {
 }
 
 const PRESERVED_STATE_KEYS = new Set(['enabled', 'disabled', 'oauth'])
+
+function configObject(value: unknown): McpConfigObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as McpConfigObject)
+    : {}
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : []
+}
+
+function referenceMatches(ref: McpValueRef, secretName: string): boolean {
+  return ref.kind === 'env' ? ref.name === secretName : ref.kind === 'secret' && ref.key === secretName
+}
+
+function replaceObjectValues(
+  value: unknown,
+  keys: readonly string[],
+  replacement: string,
+): McpConfigObject {
+  const replaced = new Set(keys)
+  return Object.fromEntries([
+    ...Object.entries(configObject(value)).filter(([key]) => !replaced.has(key)),
+    ...keys.map((key) => [key, replacement] as const),
+  ])
+}
+
+function removeObjectKeys(value: unknown, keys: readonly string[]): McpConfigObject {
+  const removed = new Set(keys)
+  return Object.fromEntries(
+    Object.entries(configObject(value)).filter(([key]) => !removed.has(key)),
+  )
+}
+
+function secretBindingKeys(
+  refs: Record<string, McpValueRef>,
+  secretName: string,
+): string[] {
+  return Object.entries(refs)
+    .filter(([, ref]) => referenceMatches(ref, secretName))
+    .map(([key]) => key)
+}
+
+function nativeServerWithSecret(
+  current: McpConfigObject,
+  definition: McpServerDefinition,
+  schema: McpPlatformProfile['schema'],
+  secretName: string,
+  secretValue: string,
+): McpConfigObject {
+  if (definition.transport.kind === 'stdio') {
+    const keys = secretBindingKeys(definition.transport.env, secretName)
+    if (keys.length === 0) {
+      throw new McpOperationError(
+        'MCP_SECRET_NOT_CONFIGURABLE',
+        `密钥 ${secretName} 不是环境变量引用，无法直接写入 Agent 配置`,
+      )
+    }
+    const field = schema === 'opencode' ? 'environment' : 'env'
+    const nativeValue: McpConfigObject = {
+      ...current,
+      [field]: replaceObjectValues(current[field], keys, secretValue),
+    }
+    if (schema === 'codex') {
+      const removed = new Set([secretName, ...keys])
+      const envVars = stringArray(current.env_vars).filter((name) => !removed.has(name))
+      if (envVars.length > 0) nativeValue.env_vars = envVars
+      else delete nativeValue.env_vars
+    }
+    return nativeValue
+  }
+
+  const keys = secretBindingKeys(definition.transport.headers, secretName)
+  if (keys.length === 0) {
+    throw new McpOperationError(
+      'MCP_SECRET_NOT_CONFIGURABLE',
+      `密钥 ${secretName} 不是 Header 引用，无法直接写入 Agent 配置`,
+    )
+  }
+  if (schema !== 'codex') {
+    return {
+      ...current,
+      headers: replaceObjectValues(current.headers, keys, secretValue),
+    }
+  }
+
+  const nativeValue: McpConfigObject = {
+    ...current,
+    http_headers: replaceObjectValues(current.http_headers, keys, secretValue),
+  }
+  const envHeaders = removeObjectKeys(current.env_http_headers, keys)
+  if (Object.keys(envHeaders).length > 0) nativeValue.env_http_headers = envHeaders
+  else delete nativeValue.env_http_headers
+  return nativeValue
+}
 
 function codecFor(source: McpConfigSource): McpConfigCodec {
   if (source.format === 'toml') return tomlMcpConfigCodec
@@ -143,6 +240,7 @@ export class PlatformMcpAdapter implements McpAdapter {
         source,
         enabled: normalized.enabled,
         authState: normalized.authState,
+        missingSecrets: normalized.missingSecrets,
         definitionHash: hashMcpDefinition(normalized.definition),
         sourceHash,
         modifiedAt: stat.mtimeMs,
@@ -203,6 +301,45 @@ export class PlatformMcpAdapter implements McpAdapter {
       afterText,
       nativeValue,
       projection,
+    }
+  }
+
+  async prepareSetSecret(
+    installation: McpInstallation,
+    secretName: string,
+    secretValue: string,
+  ): Promise<McpPreparedMutation> {
+    this.assertSourceOwner(installation.source)
+    const { source, text, servers, beforeHash } = await this.readSource(installation.source)
+    if (source.readOnly) {
+      throw new McpOperationError('MCP_TARGET_READ_ONLY', '目标 MCP 配置为只读来源')
+    }
+    const current = servers[installation.definition.name]
+    if (typeof current !== 'object' || current === null || Array.isArray(current)) {
+      throw new McpOperationError(
+        'MCP_SERVER_NOT_FOUND',
+        `目标中不存在 MCP Server ${installation.definition.name}`,
+      )
+    }
+    const nativeValue = nativeServerWithSecret(
+      current,
+      installation.definition,
+      this.profile.schema,
+      secretName,
+      secretValue,
+    )
+    return {
+      kind: 'upsert',
+      name: installation.definition.name,
+      source,
+      beforeHash,
+      beforeText: text,
+      afterText: codecFor(source).upsertServer(
+        text,
+        source.nodePath,
+        installation.definition.name,
+        nativeValue,
+      ),
     }
   }
 
@@ -267,6 +404,30 @@ export class PlatformMcpAdapter implements McpAdapter {
     }
   }
 
+  private assertSourceOwner(source: McpConfigSource): void {
+    if (source.agent !== this.agent || source.surface !== this.surface) {
+      throw new McpOperationError(
+        'MCP_TARGET_NOT_FOUND',
+        `配置来源不属于 ${this.agent}:${this.surface}`,
+      )
+    }
+  }
+
+  private async readSource(source: McpConfigSource): Promise<{
+    source: McpConfigSource
+    text: string
+    servers: McpConfigObject
+    beforeHash: string | null
+  }> {
+    const text = source.exists ? await fs.readFile(source.configPath, 'utf8') : ''
+    return {
+      source,
+      text,
+      servers: codecFor(source).readServers(text, source.nodePath),
+      beforeHash: source.exists ? hashMcpSource(text) : null,
+    }
+  }
+
   private async readTarget(target: McpTarget): Promise<{
     source: McpConfigSource
     text: string
@@ -285,12 +446,6 @@ export class PlatformMcpAdapter implements McpAdapter {
         `${this.displayName} 没有匹配的 ${target.scope} MCP 配置来源`,
       )
     }
-    const text = source.exists ? await fs.readFile(source.configPath, 'utf8') : ''
-    return {
-      source,
-      text,
-      servers: codecFor(source).readServers(text, source.nodePath),
-      beforeHash: source.exists ? hashMcpSource(text) : null,
-    }
+    return this.readSource(source)
   }
 }

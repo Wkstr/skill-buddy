@@ -26,7 +26,7 @@ import { readSecret, writeSecret } from '../secrets'
 import { copyUndoSnapshot } from '../undo-stash'
 import { PathAccessPolicy, validateCustomPlatform } from '../path-policy'
 import { derivePlatformDraft, discoverPlatformCandidates } from '../platform-discovery'
-import { setWindowChromeTheme } from '../window'
+import { setWindowChromeTheme, setWindowVibrancy } from '../window'
 import { installTarget, runTargets } from './targets'
 
 const execFileAsync = promisify(execFile)
@@ -280,6 +280,10 @@ export function registerSkillsIpc(pathPolicy: PathAccessPolicy): void {
       return
     }
     setWindowChromeTheme({ background: background.trim(), foreground: foreground.trim() })
+  })
+
+  ipcMain.handle('window:set-vibrancy', (_event, enabled: unknown) => {
+    setWindowVibrancy(enabled === true)
   })
 
   ipcMain.handle('secure:get', (_event, key: string) => readSecret(key))

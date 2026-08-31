@@ -323,7 +323,7 @@ export const INITIAL_MCP_PROFILES: readonly McpPlatformProfile[] = [
   {
     agent: 'zcode',
     surface: 'native',
-    displayName: 'Z Code',
+    displayName: 'ZCode',
     schema: 'standard',
     capabilities: standardCapabilities({ management: 'read-only' }),
     detectPaths: (homeDir) => [join(homeDir, '.zcode')],
@@ -344,7 +344,7 @@ export const INITIAL_MCP_PROFILES: readonly McpPlatformProfile[] = [
   {
     agent: 'zcode',
     surface: 'agents-compat',
-    displayName: 'Z Code (.agents)',
+    displayName: 'ZCode (.agents)',
     schema: 'standard',
     capabilities: standardCapabilities({ management: 'read-only', scopes: ['project'] }),
     detectPaths: (homeDir) => [join(homeDir, '.zcode')],

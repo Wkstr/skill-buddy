@@ -19,6 +19,7 @@ const scanResult = shallowRef<McpScanResult>({
 const loading = shallowRef(false)
 const planning = shallowRef(false)
 const applying = shallowRef(false)
+const secretSavingKey = shallowRef<string | null>(null)
 const error = shallowRef<string | null>(null)
 const lastCheckedAt = shallowRef<number | null>(null)
 const search = shallowRef('')
@@ -179,6 +180,40 @@ async function restore(operationId: string): Promise<boolean> {
   }
 }
 
+function mcpSecretSavingKey(installationId: string, secretName: string): string {
+  return `${installationId}\0${secretName}`
+}
+
+async function setSecret(
+  installationId: string,
+  secretName: string,
+  secretValue: string,
+): Promise<McpOperationRequestResult | null> {
+  const { projectRoots } = useSettings()
+  secretSavingKey.value = mcpSecretSavingKey(installationId, secretName)
+  error.value = null
+  try {
+    const result = await window.skillsManager.setMcpSecret({
+      projectRoots: [...projectRoots.value],
+      installationId,
+      secretName,
+      secretValue,
+    })
+    const failed = result.results.find((item) => !item.ok)
+    if (failed) {
+      error.value = failed.error ?? i18n.global.t('mcp.secrets.saveFailed')
+      return null
+    }
+    await refresh({ silent: true })
+    return result
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : String(cause)
+    return null
+  } finally {
+    secretSavingKey.value = null
+  }
+}
+
 function closePlan(): void {
   if (!applying.value) currentPlan.value = null
 }
@@ -204,6 +239,8 @@ export function useMcpServers() {
     loading: readonly(loading),
     planning: readonly(planning),
     applying: readonly(applying),
+    secretSavingKey: readonly(secretSavingKey),
+    settingSecret: computed(() => secretSavingKey.value !== null),
     error: readonly(error),
     lastCheckedAt: readonly(lastCheckedAt),
     search,
@@ -215,6 +252,8 @@ export function useMcpServers() {
     planToggle,
     applyPlan,
     restore,
+    setSecret,
+    mcpSecretSavingKey,
     closePlan,
   }
 }

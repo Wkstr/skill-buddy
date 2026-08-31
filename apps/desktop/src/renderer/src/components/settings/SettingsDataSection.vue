@@ -5,6 +5,7 @@ import { DEFAULT_DESKTOP_PREFERENCES } from '#shared/ipc'
 import GitBackupPanel from '@/components/settings/GitBackupPanel.vue'
 import { Button } from '@/components/ui/button'
 import { showToast } from '@/composables/useToast'
+import { confirmDialog } from '@/composables/useConfirm'
 
 const props = defineProps<{ query: string }>()
 const { t } = useI18n()
@@ -81,7 +82,7 @@ async function importConfig(): Promise<void> {
 }
 
 async function resetConfig(): Promise<void> {
-  const confirmed = await window.skillsManager.confirmDialog({
+  const confirmed = await confirmDialog({
     title: t('settings.dataResetTitle'),
     message: t('settings.dataResetMsg'),
     confirmLabel: t('settings.dataResetAction'),

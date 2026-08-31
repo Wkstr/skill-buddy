@@ -164,7 +164,7 @@ export const BUILTIN_PLATFORMS: readonly PlatformDef[] = [
   },
   {
     id: 'zcode',
-    displayName: 'Z Code',
+    displayName: 'ZCode',
     userSkillsDir: '~/.zcode/skills',
     projectSkillsDir: '.zcode/skills',
     detectPath: '~/.zcode',

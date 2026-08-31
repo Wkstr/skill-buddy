@@ -2,6 +2,48 @@
 
 All notable changes to SkillBuddy are documented in this file.
 
+## 0.1.10 - 2026-08-31
+
+### Added
+
+- Added end-to-end AI instruction discovery and governance for global and project scopes, including effective-chain analysis, diagnostics, editing, bridging, transactional writes, undo, and file watching.
+- Added project instruction compliance checks for the CLI and GitHub Actions, together with team-library instruction templates, policies, and application previews.
+- Added Gitee support for team-library contributions and per-installation MCP credential configuration.
+- Extended private Git backups with portable global AI instructions and conflict-aware restore previews.
+
+### Improved
+
+- Improved team-library editing and contribution workflows with fresh draft branches, clearer review states, and publish results.
+- Improved MCP management with project-aware installation locations, credential status, secret reveal controls, and writes to each Agent's own configuration.
+- Improved marketplace navigation persistence, dashboard card responsiveness, visual consistency, and native macOS sidebar translucency.
+
+### Fixed
+
+- Fixed AI instruction path resolution and action feedback.
+- Prevented already-pushed contribution branches from being reused.
+- Standardized the ZCode platform name across the application and documentation.
+
+---
+
+### 新增
+
+- 新增覆盖全局与项目作用域的 AI 指令发现和治理能力，包括有效链分析、诊断、编辑、桥接、事务写入、撤销和文件监听。
+- 新增 CLI 与 GitHub Actions 项目指令合规检查，并支持团队库指令模板、策略和应用预览。
+- 新增 Gitee 团队库贡献支持，以及按具体安装位置配置 MCP 凭据。
+- 扩展私有 Git 备份，支持可移植的全局 AI 指令和带冲突提示的恢复预览。
+
+### 优化
+
+- 优化团队库编辑与贡献流程，使用独立草稿分支，并完善变更审阅状态和发布结果。
+- 优化 MCP 管理，明确项目安装位置、凭据状态、密钥显示控制，并写入各 Agent 自身配置。
+- 优化市场页面导航状态保持、工作台卡片响应式布局、视觉一致性和 macOS 原生半透明侧边栏。
+
+### 修复
+
+- 修复 AI 指令路径解析和操作反馈问题。
+- 避免重复使用已经推送过的贡献分支。
+- 统一应用与文档中的 ZCode 平台名称。
+
 ## 0.1.9 - 2026-08-28
 
 ### Added
@@ -228,7 +270,7 @@ The first public desktop release of SkillBuddy for macOS, Windows, and Linux.
 
 ### Added
 
-- Aggregated Skills from Claude Code, Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, CodeBuddy, Trae, WorkBuddy, Doubao, Kimi Code, and Z Code.
+- Aggregated Skills from Claude Code, Codex, Cursor, OpenCode, GitHub Copilot, Gemini CLI, CodeBuddy, Trae, WorkBuddy, Doubao, Kimi Code, and ZCode.
 - Scanning, search, detail views, editing, enable/disable, uninstall, and batch installation for user-level and project-level Skills.
 - Cross-platform drift detection, diff inspection, and synchronization from a selected baseline.
 - Skill imports from local directories, Git repositories, and public marketplaces.
@@ -266,7 +308,7 @@ SkillBuddy 首个面向 macOS、Windows 和 Linux 的桌面端公开版本。
 
 ### 新增
 
-- 聚合 Claude Code、Codex、Cursor、OpenCode、GitHub Copilot、Gemini CLI、CodeBuddy、Trae、WorkBuddy、豆包、Kimi Code 和 Z Code 的 Skills。
+- 聚合 Claude Code、Codex、Cursor、OpenCode、GitHub Copilot、Gemini CLI、CodeBuddy、Trae、WorkBuddy、豆包、Kimi Code 和 ZCode 的 Skills。
 - 支持用户级与项目级 Skills 的扫描、搜索、详情查看、编辑、启用、禁用、卸载和批量安装。
 - 支持跨平台漂移检测、差异查看和按选定基准同步。
 - 支持从本地目录、Git 仓库和公开市场导入 Skills。

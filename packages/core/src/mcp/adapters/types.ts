@@ -30,6 +30,11 @@ export interface McpAdapter {
     definition: McpInstallation['definition'],
     target: McpTarget,
   ): Promise<McpPreparedMutation>
+  prepareSetSecret(
+    installation: McpInstallation,
+    secretName: string,
+    secretValue: string,
+  ): Promise<McpPreparedMutation>
   prepareRemove(name: string, target: McpTarget): Promise<McpPreparedMutation>
   prepareToggle(name: string, enabled: boolean, target: McpTarget): Promise<McpPreparedMutation>
 }

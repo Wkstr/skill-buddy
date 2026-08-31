@@ -9,13 +9,15 @@ import claudeIcon from '@lobehub/icons-static-svg/icons/claude-color.svg'
 import codebuddyIcon from '@lobehub/icons-static-svg/icons/codebuddy-color.svg'
 import codexSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw'
 import cursorSvg from '@lobehub/icons-static-svg/icons/cursor.svg?raw'
+import deepseekIcon from '@lobehub/icons-static-svg/icons/deepseek-color.svg'
 import doubaoIcon from '@/assets/platform-icons/doubao.webp'
 import geminiIcon from '@lobehub/icons-static-svg/icons/gemini-color.svg'
 import githubcopilotSvg from '@lobehub/icons-static-svg/icons/githubcopilot.svg?raw'
+import grokSvg from '@lobehub/icons-static-svg/icons/grok.svg?raw'
 import kimiSvg from '@lobehub/icons-static-svg/icons/kimi.svg?raw'
 import opencodeSvg from '@lobehub/icons-static-svg/icons/opencode.svg?raw'
 import ompIcon from '@/assets/platform-icons/omp.svg'
-import piIcon from '@/assets/platform-icons/pi.svg'
+import piSvg from '@lobehub/icons-static-svg/icons/pi.svg?raw'
 import qwenIcon from '@lobehub/icons-static-svg/icons/qwen-color.svg'
 import traeIcon from '@lobehub/icons-static-svg/icons/trae-color.svg'
 import workbuddyIcon from '@/assets/platform-icons/workbuddy.svg'
@@ -43,10 +45,14 @@ const ICONS: Record<string, PlatformIconDef> = {
   codex: { maskSrc: svgMask(codexSvg) },
   copilot: { maskSrc: svgMask(githubcopilotSvg) },
   cursor: { maskSrc: svgMask(cursorSvg) },
+  deepseek: { src: deepseekIcon },
+  harness: { src: deepseekIcon },
   'gemini-cli': { src: geminiIcon },
+  grok: { maskSrc: svgMask(grokSvg) },
+  'grok-build': { maskSrc: svgMask(grokSvg) },
   'qwen-code': { src: qwenIcon },
   opencode: { maskSrc: svgMask(opencodeSvg) },
-  pi: { src: piIcon },
+  pi: { maskSrc: svgMask(piSvg) },
   omp: { src: ompIcon },
   codebuddy: { src: codebuddyIcon },
   trae: { src: traeIcon },

@@ -1,10 +1,82 @@
 import type {
   AgentId,
+  EffectiveInstructionChain,
   FoundSkill,
+  InstructionDocument,
+  InstructionDiagnostic,
+  InstructionRuleProfile,
+  InstructionScanResult,
   InstallScope,
   McpServerDefinition,
   McpTarget,
+  SurfaceRef,
 } from '@skillbuddy/core'
+
+export type { EffectiveInstructionChain, InstructionDiagnostic, InstructionDocument, InstructionRuleProfile, InstructionScanResult, SurfaceRef }
+
+export interface InstructionScanRequest { projectRoots: string[] }
+export interface InstructionEffectiveChainRequest {
+  surface: SurfaceRef
+  projectRoot: string
+  targetDirectory: string
+  includesGlobal?: boolean
+}
+export interface InstructionReadRequest { path: string }
+export interface InstructionReadResult {
+  path: string
+  content: string
+  truncated: boolean
+  document: InstructionDocument
+}
+export type InstructionOperationIntent = 'write' | 'delete' | 'bridge'
+export interface InstructionOperationIssue {
+  code: string
+  message: string
+}
+export interface InstructionOperationImpact {
+  tool: string
+  chainPaths: string[]
+}
+export interface InstructionOperationPlanView {
+  planId: string
+  intent: InstructionOperationIntent
+  path: string
+  beforeText: string
+  afterText: string
+  created: boolean
+  linked: boolean
+  expiresAt: number
+  blockers: InstructionOperationIssue[]
+  warnings: InstructionOperationIssue[]
+  impacts?: InstructionOperationImpact[]
+  canApply: boolean
+}
+export interface InstructionWritePlanRequest {
+  projectRoots: string[]
+  path: string
+  content: string
+  expectedHash: string | null
+}
+export interface InstructionDeletePlanRequest {
+  projectRoots: string[]
+  path: string
+  expectedHash: string
+}
+export interface InstructionBridgePlanRequest {
+  projectRoots: string[]
+  sourcePath: string
+  expectedHash: string
+}
+export interface InstructionOperationResult {
+  operationId: string
+  path: string
+  ok: boolean
+  error?: string
+}
+export interface InstructionServiceScan extends InstructionScanResult {
+  profiles: InstructionRuleProfile[]
+  diagnostics: InstructionDiagnostic[]
+}
 
 export interface BackupPreset {
   name: string
@@ -21,7 +93,19 @@ export interface GitBackupResult {
   committed: boolean
   skills: number
   presets: number
+  instructions: number
   commit?: string
+}
+
+export type GitInstructionRestoreState = 'create' | 'unchanged' | 'conflict' | 'blocked'
+
+export interface GitInstructionRestorePreview {
+  surface: SurfaceRef
+  displayName: string
+  fileName: string
+  targetPath: string
+  state: GitInstructionRestoreState
+  error?: string
 }
 
 export interface GitRestorePreview {
@@ -29,6 +113,19 @@ export interface GitRestorePreview {
   createdAt: string
   items: FoundSkill[]
   presets: BackupPreset[]
+  instructions: GitInstructionRestorePreview[]
+}
+
+export interface GitInstructionRestoreRequest {
+  root: string
+  overwriteConflicts: boolean
+}
+
+export interface GitInstructionRestoreResult {
+  path: string
+  ok: boolean
+  skipped?: boolean
+  error?: string
 }
 
 /** Minimal existing-skill context exposed to a local AI agent. */
@@ -141,6 +238,20 @@ export interface TeamLibraryMcp extends TeamLibraryMcpSummary {
   definition: McpServerDefinition
 }
 
+export interface TeamLibraryInstructionSummary extends TeamLibrarySourceInfo {
+  type: 'instruction'
+  id: string
+  name: string
+  description: string
+  version?: string
+  target: string
+  contentHash: string
+}
+
+export interface TeamLibraryInstruction extends TeamLibraryInstructionSummary {
+  content: string
+}
+
 export interface TeamLibraryBundleSummary extends TeamLibrarySourceInfo {
   type: 'bundle'
   id: string
@@ -154,8 +265,8 @@ export interface TeamLibraryBundleSummary extends TeamLibrarySourceInfo {
 }
 
 export interface TeamLibraryPolicy {
-  required: { skills: string[]; mcp: string[] }
-  recommended: { skills: string[]; mcp: string[] }
+  required: { skills: string[]; mcp: string[]; instructions: string[] }
+  recommended: { skills: string[]; mcp: string[]; instructions: string[] }
   blocked: { ref: string; versions?: string; reason: string }[]
 }
 
@@ -176,6 +287,7 @@ export interface TeamLibraryCatalog {
   syncedAt: number
   skills: TeamLibrarySkillSummary[]
   mcpServers: TeamLibraryMcpSummary[]
+  instructions: TeamLibraryInstructionSummary[]
   bundles: TeamLibraryBundleSummary[]
   manifest: TeamLibraryManifest
   policy: TeamLibraryPolicy
@@ -220,6 +332,7 @@ export interface TeamProjectRequirements {
   bundles: string[]
   skills: string[]
   mcp: string[]
+  instructions: string[]
 }
 
 export interface TeamProjectConfig {
@@ -247,7 +360,7 @@ export interface TeamContributionWorkspace {
   baseBranch: string
   baseRevision: string
   createdAt: number
-  provider: 'github' | 'gitlab' | 'unsupported'
+  provider: 'github' | 'gitlab' | 'gitee' | 'unsupported'
 }
 
 export interface TeamContributionPublishResult {
@@ -294,6 +407,16 @@ export interface TeamLibraryMcpDraft {
   version?: string
   description: string
   definition: McpServerDefinition
+}
+
+export interface TeamLibraryInstructionDraft {
+  originalPath?: string
+  id: string
+  name: string
+  description: string
+  version?: string
+  target: string
+  content: string
 }
 
 export interface TeamLibraryBundleDraft {
@@ -377,6 +500,13 @@ export interface McpRemovePlanRequest {
 
 export interface McpTogglePlanRequest extends McpRemovePlanRequest {
   enabled: boolean
+}
+
+export interface McpSetSecretRequest {
+  projectRoots: string[]
+  installationId: string
+  secretName: string
+  secretValue: string
 }
 
 /** 外部链接的打开方式：系统默认浏览器，或应用内浏览器。 */

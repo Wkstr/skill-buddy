@@ -43,15 +43,16 @@ function normalizePolicy(value: unknown): TeamLibraryPolicy | undefined {
     throw new Error('policy 包含不支持的字段')
   }
   const resourceGroup = (group: unknown, field: string) => {
-    if (group === undefined) return { skills: [], mcp: [] }
+    if (group === undefined) return { skills: [], mcp: [], instructions: [] }
     if (typeof group !== 'object' || group === null || Array.isArray(group)) {
       throw new Error(`${field} 必须是对象`)
     }
     const source = group as Record<string, unknown>
-    if (!exactKeys(source, ['skills', 'mcp'])) throw new Error(`${field} 包含不支持的字段`)
+    if (!exactKeys(source, ['skills', 'mcp', 'instructions'])) throw new Error(`${field} 包含不支持的字段`)
     return {
       skills: requirementList(source.skills, `${field}.skills`),
       mcp: requirementList(source.mcp, `${field}.mcp`),
+      instructions: requirementList(source.instructions, `${field}.instructions`),
     }
   }
   const blocked = policy.blocked === undefined
@@ -97,7 +98,7 @@ export function normalizeTeamProjectConfig(value: unknown): TeamProjectConfig {
     throw new Error('项目团队配置缺少 requires 对象')
   }
   const requires = root.requires as Record<string, unknown>
-  if (!exactKeys(requires, ['bundles', 'skills', 'mcp'])) {
+  if (!exactKeys(requires, ['bundles', 'skills', 'mcp', 'instructions'])) {
     throw new Error('requires 包含不支持的字段')
   }
   const library = typeof root.library === 'string' ? root.library.trim() : ''
@@ -113,6 +114,7 @@ export function normalizeTeamProjectConfig(value: unknown): TeamProjectConfig {
     bundles: requirementList(requires.bundles, 'requires.bundles'),
     skills: requirementList(requires.skills, 'requires.skills'),
     mcp: requirementList(requires.mcp, 'requires.mcp'),
+    instructions: requirementList(requires.instructions, 'requires.instructions'),
   }
   return {
     version: 1,
@@ -130,8 +132,8 @@ function errorCode(error: unknown): string | undefined {
 /** 读取项目根目录中的 .skillbuddy/team.yaml，并返回经过白名单校验的结构。 */
 export async function readTeamProjectConfig(input: unknown): Promise<TeamProjectConfigResult> {
   const candidate = typeof input === 'string' ? input.trim() : ''
-  const projectRoot = candidate && isAbsolute(candidate) ? resolve(candidate) : candidate
-  const configPath = projectRoot ? join(projectRoot, '.skillbuddy', 'team.yaml') : ''
+  let projectRoot = candidate && isAbsolute(candidate) ? resolve(candidate) : candidate
+  let configPath = projectRoot ? join(projectRoot, '.skillbuddy', 'team.yaml') : ''
   try {
     if (!candidate || !isAbsolute(candidate) || /[\u0000-\u001f]/.test(candidate)) {
       throw new Error('项目根目录必须是有效的绝对路径')
@@ -140,6 +142,8 @@ export async function readTeamProjectConfig(input: unknown): Promise<TeamProject
       throw new Error('不能把用户主目录或文件系统根目录作为项目根目录')
     }
     if (!(await fs.stat(projectRoot)).isDirectory()) throw new Error('项目根目录不存在或不是目录')
+    projectRoot = await fs.realpath(projectRoot)
+    configPath = join(projectRoot, '.skillbuddy', 'team.yaml')
     const teamDirectory = join(projectRoot, '.skillbuddy')
     let directoryStat
     try {

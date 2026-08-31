@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import ColorSwatchField from '@/components/appearance/ColorSwatchField.vue'
 import {
@@ -18,7 +17,7 @@ import { showToast } from '@/composables/useToast'
 
 /**
  * 深/浅色主题的自定义面板：预设、导入/复制、强调色/背景/前景、
- * 字体、半透明侧边栏与对比度。
+ * 字体与半透明侧边栏。
  */
 const props = defineProps<{ mode: 'light' | 'dark' }>()
 
@@ -132,22 +131,6 @@ function confirmImport(): void {
       <div v-if="isMac" class="flex items-center justify-between gap-6 px-5 py-3.5">
         <p class="text-sm">{{ t('settings.appearanceTranslucent') }}</p>
         <Switch v-model="appearance.translucentSidebar" />
-      </div>
-      <div class="flex items-center justify-between gap-6 px-5 py-3.5">
-        <p class="text-sm">{{ t('settings.appearanceContrast') }}</p>
-        <div class="flex w-64 shrink-0 items-center gap-3">
-          <Slider
-            v-model="colors.contrast"
-            :min="0"
-            :max="100"
-            :step="1"
-            :ariaLabel="t('settings.appearanceContrast')"
-            class="flex-1"
-          />
-          <span class="w-7 text-right text-sm tabular-nums text-muted-foreground">
-            {{ colors.contrast }}
-          </span>
-        </div>
       </div>
     </div>
 

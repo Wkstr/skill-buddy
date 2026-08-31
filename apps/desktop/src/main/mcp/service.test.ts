@@ -8,7 +8,7 @@ import {
   type McpServerDefinition,
   type McpTarget,
 } from '@skillbuddy/core'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { McpService } from './service.js'
 
 const capabilities = defineMcpCapabilities({
@@ -81,6 +81,7 @@ describe('McpService', () => {
   })
 
   afterEach(async () => {
+    vi.unstubAllEnvs()
     service.dispose()
     await fs.rm(root, { recursive: true, force: true })
   })
@@ -202,6 +203,130 @@ describe('McpService', () => {
       expect.objectContaining({ path: configPath, ok: false }),
     ])
     await expect(fs.readFile(configPath, 'utf8')).resolves.toContain('changedAfterApply')
+  })
+
+  it('只向指定安装写入密钥且 IPC 结果不返回密钥值', async () => {
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        keep: 'private source text',
+        mcpServers: {
+          database: {
+            command: 'node',
+            args: ['server.js'],
+            env: { DATABASE_URL: '${DATABASE_URL}' },
+          },
+        },
+      }),
+      'utf8',
+    )
+    const scan = await service.scan()
+    const installation = scan.installations.find((item) => item.definition.name === 'database')
+    expect(installation).toBeDefined()
+    if (!installation) throw new Error('测试 MCP 安装不存在')
+
+    const result = await service.setSecret({
+      projectRoots: [],
+      installationId: installation.id,
+      secretName: 'DATABASE_URL',
+      secretValue: 'postgres://local-secret',
+    })
+
+    expect(result.results).toEqual([
+      expect.objectContaining({ path: configPath, ok: true }),
+    ])
+    expect(JSON.stringify(result)).not.toContain('postgres://local-secret')
+    const config = JSON.parse(await fs.readFile(configPath, 'utf8')) as {
+      keep: string
+      mcpServers: { database: { env: Record<string, string> } }
+    }
+    expect(config.keep).toBe('private source text')
+    expect(config.mcpServers.database.env.DATABASE_URL).toBe('postgres://local-secret')
+
+    const restored = await service.restore(result.operationId)
+    expect(restored).toEqual([expect.objectContaining({ path: configPath, ok: true })])
+    await expect(fs.readFile(configPath, 'utf8')).resolves.toContain('${DATABASE_URL}')
+  })
+
+  it('拒绝把普通运行时环境变量当作密钥写入', async () => {
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          internal: {
+            command: 'node',
+            args: ['server.js'],
+            env: { CODEX_HOME: '${CODEX_HOME}' },
+          },
+        },
+      }),
+      'utf8',
+    )
+    const scan = await service.scan()
+    const installation = scan.installations.find((item) => item.definition.name === 'internal')
+    expect(installation).toBeDefined()
+    if (!installation) throw new Error('测试 MCP 安装不存在')
+
+    await expect(
+      service.setSecret({
+        projectRoots: [],
+        installationId: installation.id,
+        secretName: 'CODEX_HOME',
+        secretValue: '/tmp/codex-home',
+      }),
+    ).rejects.toThrow('不是需要手动填写的凭据')
+    await expect(fs.readFile(configPath, 'utf8')).resolves.not.toContain('/tmp/codex-home')
+  })
+
+  it('同一安装内不覆盖已经取到值的凭据引用', async () => {
+    vi.stubEnv('SB_TEST_PRESENT_TOKEN', 'from-shell')
+    vi.stubEnv('SB_TEST_ABSENT_TOKEN', '')
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          mixed: {
+            command: 'node',
+            args: ['server.js'],
+            env: {
+              SB_TEST_PRESENT_TOKEN: '${SB_TEST_PRESENT_TOKEN}',
+              SB_TEST_ABSENT_TOKEN: '${SB_TEST_ABSENT_TOKEN}',
+            },
+          },
+        },
+      }),
+      'utf8',
+    )
+    const scan = await service.scan()
+    const installation = scan.installations.find((item) => item.definition.name === 'mixed')
+    if (!installation) throw new Error('测试 MCP 安装不存在')
+
+    // 缺一个就整体 missing-secrets，但只有真正缺值的那个可以写入。
+    expect(installation.authState).toBe('missing-secrets')
+    expect(installation.missingSecrets).toEqual(['SB_TEST_ABSENT_TOKEN'])
+
+    await expect(
+      service.setSecret({
+        projectRoots: [],
+        installationId: installation.id,
+        secretName: 'SB_TEST_PRESENT_TOKEN',
+        secretValue: 'plaintext-should-not-land',
+      }),
+    ).rejects.toThrow('当前已有取值')
+    await expect(fs.readFile(configPath, 'utf8')).resolves.toContain('${SB_TEST_PRESENT_TOKEN}')
+
+    const result = await service.setSecret({
+      projectRoots: [],
+      installationId: installation.id,
+      secretName: 'SB_TEST_ABSENT_TOKEN',
+      secretValue: 'plaintext-allowed',
+    })
+    expect(result.results).toEqual([expect.objectContaining({ path: configPath, ok: true })])
+    const config = JSON.parse(await fs.readFile(configPath, 'utf8')) as {
+      mcpServers: { mixed: { env: Record<string, string> } }
+    }
+    expect(config.mcpServers.mixed.env.SB_TEST_ABSENT_TOKEN).toBe('plaintext-allowed')
+    expect(config.mcpServers.mixed.env.SB_TEST_PRESENT_TOKEN).toBe('${SB_TEST_PRESENT_TOKEN}')
   })
 
   it.each([

@@ -47,7 +47,7 @@ onUnmounted(() => loadMoreObserver?.disconnect())
 <template>
   <ul v-if="props.loading" class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
     <li v-for="index in 8" :key="index">
-      <div class="flex h-full flex-col rounded-2xl border bg-card px-3.5 py-3.5">
+      <div class="flex h-full flex-col rounded-xl border bg-card px-3.5 py-3.5">
         <div class="flex items-center gap-2.5">
           <Skeleton class="size-8 shrink-0 rounded-full" />
           <Skeleton class="h-4 flex-1" />
@@ -88,7 +88,7 @@ onUnmounted(() => loadMoreObserver?.disconnect())
         class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4"
       >
         <li v-for="index in 4" :key="index">
-          <div class="flex h-full flex-col rounded-2xl border bg-card px-3.5 py-3.5">
+          <div class="flex h-full flex-col rounded-xl border bg-card px-3.5 py-3.5">
             <div class="flex items-center gap-2.5">
               <Skeleton class="size-8 shrink-0 rounded-full" />
               <Skeleton class="h-4 flex-1" />

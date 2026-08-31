@@ -8,7 +8,11 @@ export interface TeamLibraryPolicyState {
 }
 
 export function emptyTeamPolicy(): TeamLibraryPolicy {
-  return { required: { skills: [], mcp: [] }, recommended: { skills: [], mcp: [] }, blocked: [] }
+  return {
+    required: { skills: [], mcp: [], instructions: [] },
+    recommended: { skills: [], mcp: [], instructions: [] },
+    blocked: [],
+  }
 }
 
 /** 按组织、团队、项目的顺序合并策略，后层覆盖相同 ref + versions 的禁用规则。 */
@@ -21,10 +25,12 @@ export function mergeTeamPolicies(...policies: TeamLibraryPolicy[]): TeamLibrary
     required: {
       skills: [...new Set(policies.flatMap((policy) => policy.required.skills))],
       mcp: [...new Set(policies.flatMap((policy) => policy.required.mcp))],
+      instructions: [...new Set(policies.flatMap((policy) => policy.required.instructions))],
     },
     recommended: {
       skills: [...new Set(policies.flatMap((policy) => policy.recommended.skills))],
       mcp: [...new Set(policies.flatMap((policy) => policy.recommended.mcp))],
+      instructions: [...new Set(policies.flatMap((policy) => policy.recommended.instructions))],
     },
     blocked: [...blocked.values()],
   }

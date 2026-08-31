@@ -19,6 +19,7 @@ interface NormalizedNativeServer {
   definition: McpServerDefinition
   enabled: boolean | null
   authState: McpAuthState
+  missingSecrets: string[]
   platformMetadata: Record<string, unknown>
 }
 
@@ -144,19 +145,34 @@ function metadataFor(schema: McpNativeSchema, value: McpConfigObject): Record<st
   }
 }
 
-function authState(
+/**
+ * 逐个列出尚未取到值的引用名称。
+ *
+ * `authState` 是整个安装的聚合状态，无法区分「哪几个引用缺失」；写入明文密钥前必须
+ * 按名称精确判断，否则同一安装下已经生效的 `${VAR}` 引用会被覆盖成硬编码值。
+ */
+function missingSecretNames(
   refs: Record<string, McpValueRef>,
   environment: NodeJS.ProcessEnv,
+): string[] {
+  const missing = new Set(
+    Object.values(refs).flatMap((ref) => {
+      if (ref.kind === 'env') return environment[ref.name] ? [] : [ref.name]
+      if (ref.kind === 'secret' && ref.state === 'missing') return [ref.key]
+      return []
+    }),
+  )
+  return [...missing].sort()
+}
+
+function authState(
+  refs: Record<string, McpValueRef>,
+  missing: string[],
   requiresOAuth: boolean,
 ): McpAuthState {
   if (requiresOAuth) return 'requires-oauth'
+  if (missing.length > 0) return 'missing-secrets'
   const values = Object.values(refs)
-  if (values.some((ref) => ref.kind === 'env' && !environment[ref.name])) {
-    return 'missing-secrets'
-  }
-  if (values.some((ref) => ref.kind === 'secret' && ref.state === 'missing')) {
-    return 'missing-secrets'
-  }
   if (values.length === 0) return 'ready'
   return values.every((ref) => ref.kind !== 'secret' || ref.state === 'configured')
     ? 'ready'
@@ -188,6 +204,7 @@ export function normalizeNativeMcpServer(
       ...Object.values(env).flatMap((ref) => referenceRequirement(ref) ?? []),
       ...secretKeys,
     ])
+    const missingSecrets = missingSecretNames(env, environment)
     return {
       definition: {
         name,
@@ -203,7 +220,8 @@ export function normalizeNativeMcpServer(
           secretKeys.length > 0 ? { nonExportableFields: ['transport.args'] } : undefined,
       },
       enabled,
-      authState: authState(env, environment, false),
+      authState: authState(env, missingSecrets, false),
+      missingSecrets,
       platformMetadata: metadataFor(schema, value),
     }
   }
@@ -223,6 +241,7 @@ export function normalizeNativeMcpServer(
     ...secretKeys,
   ])
   const requiresOAuth = value.oauth !== undefined && value.oauth !== false
+  const missingSecrets = requiresOAuth ? [] : missingSecretNames(headers, environment)
 
   return {
     definition: {
@@ -239,7 +258,8 @@ export function normalizeNativeMcpServer(
           : undefined,
     },
     enabled,
-    authState: authState(headers, environment, requiresOAuth),
+    authState: authState(headers, missingSecrets, requiresOAuth),
+    missingSecrets,
     platformMetadata: metadataFor(schema, value),
   }
 }

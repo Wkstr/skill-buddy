@@ -25,6 +25,7 @@ function installation(
     },
     enabled,
     authState: 'ready',
+    missingSecrets: [],
     definitionHash: hashMcpDefinition(definition),
     sourceHash: agent,
   }

@@ -45,15 +45,9 @@ async function executePlan(): Promise<void> {
 </script>
 
 <template>
-  <McpMarketDetail
-    v-if="selectedItem"
-    :key="selectedItem.key"
-    :item="selectedItem"
-    :inset="props.inset"
-    @close="selectedItem = null"
-  />
-  <div v-else class="flex h-full min-w-0 flex-col">
+  <div class="flex h-full min-w-0 flex-col">
     <header
+      v-show="!selectedItem"
       :class="[
         'app-drag relative flex min-h-14 shrink-0 items-center gap-4 border-b px-6 py-2',
         props.inset && 'pl-[118px]',
@@ -77,10 +71,27 @@ async function executePlan(): Promise<void> {
       </div>
     </header>
 
-    <McpMarketCatalog
-      @open-detail="selectedItem = $event"
-      @install="installItem = $event"
-    />
+    <div
+      v-show="!selectedItem"
+      class="min-h-0 flex-1"
+    >
+      <KeepAlive>
+        <McpMarketCatalog
+          @open-detail="selectedItem = $event"
+          @install="installItem = $event"
+        />
+      </KeepAlive>
+    </div>
+
+    <KeepAlive :max="3">
+      <McpMarketDetail
+        v-if="selectedItem"
+        :key="selectedItem.key"
+        :item="selectedItem"
+        :inset="props.inset"
+        @close="selectedItem = null"
+      />
+    </KeepAlive>
   </div>
   <McpMarketInstallDialog
     v-if="installItem"

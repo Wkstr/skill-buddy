@@ -18,7 +18,11 @@ const { t } = useI18n()
 
 <template>
   <section class="flex flex-col gap-3">
-    <Button size="sm" class="w-fit cursor-pointer" @click="emit('create')">
+    <Button
+      size="sm"
+      class="w-fit cursor-pointer self-end"
+      @click="emit('create')"
+    >
       <PackagePlus />
       {{ t('team.bundleCreate') }}
     </Button>

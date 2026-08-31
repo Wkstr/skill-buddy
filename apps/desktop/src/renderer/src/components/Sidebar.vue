@@ -208,7 +208,7 @@ async function removeProjectRoot(root: string): Promise<void> {
         </nav>
       </ScrollArea>
 
-      <div class="flex shrink-0 items-center gap-1 px-2 pb-3">
+      <div class="flex shrink-0 items-center gap-1 px-2 pb-3 pt-2">
         <button
           type="button"
           class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"

@@ -29,6 +29,7 @@ const {
   loading,
   planning,
   applying,
+  settingSecret,
   error,
   search,
   currentPlan,
@@ -252,7 +253,7 @@ async function executePlan(): Promise<void> {
         v-if="selectedServer"
         :server="selectedServer"
         :platforms="platforms"
-        :busy="planning || applying"
+        :busy="planning || applying || settingSecret"
         @sync="openSync"
         @remove="planRemove"
         @toggle="reviewToggle"

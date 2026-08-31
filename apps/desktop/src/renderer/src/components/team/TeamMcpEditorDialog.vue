@@ -26,11 +26,13 @@ const transportOptions = [
   { value: 'sse', label: 'SSE' },
   { value: 'websocket', label: 'WebSocket' },
 ]
-const valid = computed(() => Boolean(
-  form.name.trim() &&
-  form.description.trim() &&
-  (transport.value === 'stdio' ? form.command.trim() : form.url.trim()),
-))
+/** 描述留空由主进程回落到定义自身的描述，这里只校验无法推导的字段。 */
+const missingFields = computed(() => [
+  ...(form.name.trim() ? [] : [t('team.formName')]),
+  ...(transport.value === 'stdio'
+    ? (form.command.trim() ? [] : [t('team.formCommand')])
+    : (form.url.trim() ? [] : [t('team.formEndpoint')])),
+])
 
 function referenceLines(value: Record<string, McpValueRef>): string {
   return Object.entries(value).map(([key, reference]) =>
@@ -74,7 +76,7 @@ function references(): Record<string, McpValueRef> {
 }
 
 function submit(): void {
-  if (!valid.value) return
+  if (missingFields.value.length > 0) return
   const requiredSecrets = [...new Set(secretsText.value.split(/[,\n]/).map((value) => value.trim()).filter(Boolean))]
   const shared = { name: form.name.trim(), description: form.description.trim(), requiredSecrets }
   const remoteTransport = transport.value as RemoteMcpTransportKind
@@ -114,7 +116,7 @@ function submit(): void {
         <form class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4" @submit.prevent="submit">
           <div class="grid gap-4 sm:grid-cols-3">
             <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formName') }}<Input v-model="form.name" placeholder="internal-docs" /></label>
-            <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" placeholder="1.0.0" /></label>
+            <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formVersion') }}<Input v-model="form.version" :placeholder="t('team.formVersionPh')" /></label>
             <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formTransport') }}<Select v-model="transport" :options="transportOptions" /></label>
           </div>
           <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formDescription') }}<Input v-model="form.description" /></label>
@@ -133,9 +135,15 @@ function submit(): void {
           </label>
           <label class="grid gap-1.5 text-sm font-medium">{{ t('team.formRequiredSecrets') }}<Input v-model="secretsText" placeholder="INTERNAL_MCP_TOKEN" /></label>
         </form>
-        <div class="flex justify-end gap-2 border-t px-5 py-4">
+        <div class="flex items-center justify-end gap-2 border-t px-5 py-4">
+          <p
+            v-if="missingFields.length"
+            class="mr-auto text-xs text-muted-foreground"
+          >
+            {{ t('team.formMissingFields', { fields: missingFields.join('、') }) }}
+          </p>
           <Button variant="ghost" size="sm" class="cursor-pointer" @click="emit('close')">{{ t('common.cancel') }}</Button>
-          <Button size="sm" class="cursor-pointer" :disabled="!valid" :loading="busy" @click="submit">{{ busy ? t('team.saving') : t('team.saveToChanges') }}</Button>
+          <Button size="sm" class="cursor-pointer" :disabled="missingFields.length > 0" :loading="busy" @click="submit">{{ busy ? t('team.saving') : t('team.saveToChanges') }}</Button>
         </div>
       </DialogContent>
     </DialogPortal>

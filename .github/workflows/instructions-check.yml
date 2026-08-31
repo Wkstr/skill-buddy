@@ -1,0 +1,107 @@
+name: 项目指令合规检查
+
+# 项目仓库可直接复制本工作流。默认约定：
+# - 项目根存在 .skillbuddy/team.yaml，否则整个检查跳过；
+# - 团队库通过仓库变量 TEAM_LIBRARY_REPO（或手动触发参数）指定，私有库再配 TEAM_LIBRARY_TOKEN；
+# - 团队库已随项目一起检出时，留空 TEAM_LIBRARY_REPO 并用 library_path 指向项目内目录。
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      library_repo:
+        description: 团队库仓库（owner/repo）。留空表示团队库已随项目一起检出
+        required: false
+        type: string
+      library_path:
+        description: 团队库相对于工作区根的路径
+        required: false
+        default: team-library
+        type: string
+
+env:
+  LIBRARY_PATH: ${{ inputs.library_path || 'team-library' }}
+  LIBRARY_REPO: ${{ inputs.library_repo || vars.TEAM_LIBRARY_REPO }}
+  CLI_DIR: .skillbuddy-cli
+
+jobs:
+  instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出项目
+        uses: actions/checkout@v4
+
+      # hashFiles 在 job 级 if 中会在检出之前求值并恒返回空字符串，
+      # 因此团队库登记状态必须在检出之后判断。
+      - name: 检测项目是否登记团队库
+        id: guard
+        run: |
+          if [ -f .skillbuddy/team.yaml ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '未找到 .skillbuddy/team.yaml，跳过项目指令检查。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 检出团队库
+        if: steps.guard.outputs.enabled == 'true' && env.LIBRARY_REPO != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LIBRARY_REPO }}
+          token: ${{ secrets.TEAM_LIBRARY_TOKEN || github.token }}
+          path: ${{ env.LIBRARY_PATH }}
+
+      - name: 校验团队库已就位
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          if [ ! -f "$LIBRARY_PATH/team-library.yaml" ]; then
+            echo "::error::未在 $LIBRARY_PATH 找到 team-library.yaml。请配置仓库变量 TEAM_LIBRARY_REPO，或用 library_path 指向项目内的团队库目录。"
+            exit 1
+          fi
+
+      # CLI 尚未发布到 npm，先检出源码构建。改 ref 为发布 tag 可固定检查逻辑的版本。
+      - name: 检出 SkillBuddy CLI
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: konnga/skill-buddy
+          ref: main
+          path: ${{ env.CLI_DIR }}
+
+      - name: 安装 pnpm
+        if: steps.guard.outputs.enabled == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ${{ env.CLI_DIR }}/package.json
+
+      - name: 安装 Node.js
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ env.CLI_DIR }}/pnpm-lock.yaml
+
+      - name: 构建 CLI
+        if: steps.guard.outputs.enabled == 'true'
+        working-directory: ${{ env.CLI_DIR }}
+        run: |
+          pnpm install --frozen-lockfile --filter '@skillbuddy/cli...'
+          pnpm --filter @skillbuddy/core build
+          pnpm --filter @skillbuddy/cli build
+
+      - name: 执行项目指令检查
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          {
+            echo '## 项目指令合规检查'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          node "$CLI_DIR/packages/cli/dist/index.js" instructions check \
+            --project "$GITHUB_WORKSPACE" \
+            --library "$GITHUB_WORKSPACE/$LIBRARY_PATH" | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

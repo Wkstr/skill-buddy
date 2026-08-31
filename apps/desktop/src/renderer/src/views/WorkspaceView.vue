@@ -20,6 +20,7 @@ const DashboardView = defineAsyncComponent(() => import('@/views/DashboardView.v
 const GroupsView = defineAsyncComponent(() => import('@/views/GroupsView.vue'))
 const SkillsView = defineAsyncComponent(() => import('@/views/SkillsView.vue'))
 const McpServersView = defineAsyncComponent(() => import('@/views/McpServersView.vue'))
+const InstructionsView = defineAsyncComponent(() => import('@/views/InstructionsView.vue'))
 const TeamView = defineAsyncComponent(() => import('@/views/TeamView.vue'))
 
 const props = defineProps<{
@@ -189,7 +190,10 @@ watch(skills, (value) => {
       :skill="conversationSkill ?? undefined"
       @close="closeConversation"
     />
-    <div v-show="!overlayOpen" class="flex min-h-0 flex-1 flex-col">
+    <div
+      v-show="!overlayOpen"
+      class="flex min-h-0 flex-1 flex-col"
+    >
       <TeamView
         v-if="props.view === 'team'"
         :inset="props.inset"
@@ -200,18 +204,26 @@ watch(skills, (value) => {
         :inset="props.inset"
         @navigate="emit('navigate', $event)"
       />
-      <KeepAlive v-else :max="3">
+      <KeepAlive
+        v-else
+        :max="3"
+      >
         <DashboardView
           v-if="props.view === 'dashboard'"
           :inset="props.inset"
           @open-market="marketSelected = $event"
           @open-attention="attentionOpen = true"
           @open-drift="openDriftSkills"
+          @open-instructions="emit('navigate', 'instructions')"
           @new-skill="openConversation()"
           @import-skills="emit('importSkills')"
         />
         <McpServersView
           v-else-if="props.view === 'mcp'"
+          :inset="props.inset"
+        />
+        <InstructionsView
+          v-else-if="props.view === 'instructions'"
           :inset="props.inset"
         />
         <SkillsView

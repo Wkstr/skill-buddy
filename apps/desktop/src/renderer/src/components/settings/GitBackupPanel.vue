@@ -10,6 +10,7 @@ import { useSettings } from '@/composables/useSettings'
 import { useSkills } from '@/composables/useSkills'
 import { showToast } from '@/composables/useToast'
 import { mergePreset } from '@/lib/preset-format'
+import { confirmDialog } from '@/composables/useConfirm'
 
 const { t } = useI18n()
 const { groups } = useSettings()
@@ -23,6 +24,20 @@ const preview = shallowRef<GitRestorePreview | null>(null)
 const restoreTargets = ref<InstallTarget[]>([])
 
 const canRun = computed(() => Boolean(remoteUrl.value.trim() && branch.value.trim() && !busy.value))
+const instructionConflicts = computed(() =>
+  preview.value?.instructions.filter((instruction) => instruction.state === 'conflict').length ?? 0,
+)
+const actionableInstructions = computed(() =>
+  preview.value?.instructions.filter((instruction) =>
+    instruction.state === 'create' || instruction.state === 'conflict',
+  ).length ?? 0,
+)
+const canRestore = computed(() => {
+  const snapshot = preview.value
+  if (!snapshot || busy.value) return false
+  if (snapshot.items.length > 0 && restoreTargets.value.length === 0) return false
+  return snapshot.items.length > 0 || snapshot.presets.length > 0 || actionableInstructions.value > 0
+})
 
 function persistConnection(): void {
   localStorage.setItem('skm.backupRemote', JSON.stringify(remoteUrl.value.trim()))
@@ -46,7 +61,11 @@ async function backup(): Promise<void> {
     })
     showToast({
       message: result.committed
-        ? t('settings.backupPushed', { skills: result.skills, presets: result.presets })
+        ? t('settings.backupPushed', {
+            skills: result.skills,
+            presets: result.presets,
+            instructions: result.instructions,
+          })
         : t('settings.backupUnchanged'),
       type: result.committed ? 'success' : 'info',
     })
@@ -84,13 +103,15 @@ onBeforeUnmount(() => {
 async function restore(): Promise<void> {
   const snapshot = preview.value
   const targets = restoreTargets.value
-  if (!snapshot || targets.length === 0 || busy.value) return
-  const confirmed = await window.skillsManager.confirmDialog({
+  if (!snapshot || !canRestore.value) return
+  const confirmed = await confirmDialog({
     title: t('settings.restoreConfirmTitle'),
     message: t('settings.restoreConfirmMsg', {
       skills: snapshot.items.length,
       presets: snapshot.presets.length,
       targets: targets.length,
+      instructions: actionableInstructions.value,
+      conflicts: instructionConflicts.value,
     }),
     confirmLabel: t('settings.restoreConfirmAction'),
     cancelLabel: t('common.cancel'),
@@ -102,6 +123,7 @@ async function restore(): Promise<void> {
   error.value = null
   try {
     let completed = 0
+    let instructionCompleted = 0
     const failures: string[] = []
     for (const item of snapshot.items) {
       const results = await installSkill(item.skill, targets, { refresh: false })
@@ -113,11 +135,25 @@ async function restore(): Promise<void> {
           .filter(Boolean),
       )
     }
+    const instructionResults = await window.skillsManager.restoreGitInstructions({
+      root: snapshot.root,
+      overwriteConflicts: true,
+    })
+    instructionCompleted = instructionResults.filter((result) => result.ok && !result.skipped).length
+    failures.push(
+      ...instructionResults
+        .filter((result) => !result.ok)
+        .map((result) => result.error ?? '')
+        .filter(Boolean),
+    )
     let merged = groups.value
     for (const preset of snapshot.presets) merged = mergePreset(merged, preset).groups
     groups.value = merged
     await refresh({ silent: true })
-    showToast.success(t('settings.restoreDone', { n: completed }))
+    showToast.success(t('settings.restoreDone', {
+      skills: completed,
+      instructions: instructionCompleted,
+    }))
     if (failures.length > 0) showToast.error(failures.join('；'))
     preview.value = null
   } catch (cause) {
@@ -180,15 +216,52 @@ async function restore(): Promise<void> {
             date: new Date(preview.createdAt).toLocaleString(),
             skills: preview.items.length,
             presets: preview.presets.length,
+            instructions: preview.instructions.length,
           })
         }}
       </p>
-      <PlatformTargetPicker v-model="restoreTargets" :label="t('settings.restoreTargets')" />
+      <PlatformTargetPicker
+        v-if="preview.items.length > 0"
+        v-model="restoreTargets"
+        :label="t('settings.restoreTargets')"
+      />
+      <div v-if="preview.instructions.length > 0" class="divide-y border-y">
+        <div
+          v-for="instruction in preview.instructions"
+          :key="`${instruction.surface.vendorId}/${instruction.surface.productId}/${instruction.surface.surfaceId}/${instruction.fileName}`"
+          class="flex items-start justify-between gap-4 py-2.5"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-medium">
+              {{ instruction.displayName }} · {{ instruction.fileName }}
+            </p>
+            <p class="truncate text-xs text-muted-foreground" :title="instruction.targetPath">
+              {{ instruction.targetPath || instruction.error }}
+            </p>
+            <p v-if="instruction.error && instruction.targetPath" class="text-xs text-destructive">
+              {{ instruction.error }}
+            </p>
+          </div>
+          <span
+            :class="[
+              'shrink-0 text-xs',
+              instruction.state === 'conflict' || instruction.state === 'blocked'
+                ? 'text-destructive'
+                : 'text-muted-foreground',
+            ]"
+          >
+            {{ t(`settings.restoreInstructionState.${instruction.state}`) }}
+          </span>
+        </div>
+      </div>
+      <p v-if="instructionConflicts > 0" class="text-xs text-destructive">
+        {{ t('settings.restoreInstructionConflict', { n: instructionConflicts }) }}
+      </p>
       <Button
         class="cursor-pointer"
         variant="destructive"
         size="sm"
-        :disabled="busy || restoreTargets.length === 0"
+        :disabled="!canRestore"
         @click="restore"
       >
         {{ t('settings.restoreAction') }}

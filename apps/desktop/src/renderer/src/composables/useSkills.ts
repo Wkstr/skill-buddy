@@ -4,6 +4,7 @@ import type { InstallTarget, TargetResult } from '#shared/ipc'
 import { i18n } from '../i18n'
 import { matchesSkillInstallation } from '../lib/skill-installations'
 import { useSettings } from './useSettings'
+import { confirmDialog } from '@/composables/useConfirm'
 
 const skills = shallowRef<AggregatedSkill[]>([])
 const platforms = shallowRef<PlatformStatus[]>([])
@@ -289,7 +290,7 @@ async function install(
 
 async function uninstall(name: string, targets: InstallTarget[]): Promise<TargetResult[]> {
   if (useSettings().confirmUninstall.value) {
-    const confirmed = await window.skillsManager.confirmDialog({
+    const confirmed = await confirmDialog({
       title: i18n.global.t('settings.confirmUninstallTitle'),
       message: i18n.global.t('settings.confirmUninstallMsg', { name, n: targets.length }),
       confirmLabel: i18n.global.t('settings.confirmUninstallAction'),

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, type DeepReadonly } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ExternalLink, FileDiff, FolderOpen, GitPullRequest, RotateCcw } from '@lucide/vue'
+import { FileDiff, FolderOpen, GitPullRequest, RotateCcw } from '@lucide/vue'
 import type { TeamContributionDiff, TeamContributionPublishResult } from '#shared/ipc'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import TeamPublishResult from '@/components/team/TeamPublishResult.vue'
 import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
@@ -18,9 +19,6 @@ const title = shallowRef(t('team.managementDefaultTitle'))
 const body = shallowRef(t('team.managementDefaultBody'))
 const canPublish = computed(() => Boolean(props.diff?.files.length && !props.diff?.issues?.length && title.value.trim()))
 
-function openResult(): void {
-  if (props.result?.url) void window.skillsManager.openLink(props.result.url)
-}
 </script>
 
 <template>
@@ -61,10 +59,6 @@ function openResult(): void {
       <Button class="w-fit cursor-pointer" size="sm" :disabled="!canPublish" :loading="busy" @click="emit('publish', title, body)"><GitPullRequest v-if="!busy" />{{ busy ? t('team.contributionPublishing') : t('team.contributionPublish') }}</Button>
     </div>
 
-    <div v-if="result" class="rounded-md border px-4 py-3 text-sm">
-      <p>{{ t('team.contributionPushed', { branch: result.branch }) }}</p>
-      <p v-if="result.warning" class="mt-1 text-amber-700 dark:text-amber-400">{{ result.warning }}</p>
-      <Button v-if="result.url" variant="link" class="mt-1 h-auto cursor-pointer p-0" @click="openResult"><ExternalLink />{{ t('team.contributionOpenRequest') }}</Button>
-    </div>
+    <TeamPublishResult :result="result" />
   </div>
 </template>

@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, shallowRef, toValue, watch, type MaybeRefOrGetter } from 'vue'
+import { computed, onActivated, onMounted, ref, shallowRef, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { McpTarget } from '@skillbuddy/core'
 import type { TeamLibraryMcpDraft } from '#shared/ipc'
@@ -37,6 +37,7 @@ export function useMcpMarketDetail(options: UseMcpMarketDetailOptions) {
   const selectedCandidate = shallowRef(0)
   const targets = ref<McpTarget[]>([])
   let detailRequestId = 0
+  let justMounted = false
 
   const item = computed(() => toValue(options.item))
   const preferChinese = computed(() => locale.value.toLowerCase().startsWith('zh'))
@@ -150,6 +151,18 @@ export function useMcpMarketDetail(options: UseMcpMarketDetailOptions) {
   }
 
   onMounted(() => {
+    justMounted = true
+    void refresh({ silent: true })
+    void loadDetail()
+  })
+
+  // 详情页被 KeepAlive 缓存，重新打开同一个 item 时既不会 mount 也不会触发 key 变化，
+  // 没有这个钩子就会一直显示第一次拉取的数据。首次激活紧跟在 onMounted 之后，跳过以免重复请求。
+  onActivated(() => {
+    if (justMounted) {
+      justMounted = false
+      return
+    }
     void refresh({ silent: true })
     void loadDetail()
   })

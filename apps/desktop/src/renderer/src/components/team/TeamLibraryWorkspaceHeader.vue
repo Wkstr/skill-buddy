@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Boxes, FilePlus2, FolderOpen, PackagePlus, ServerCog, Sparkles } from '@lucide/vue'
+import { Boxes, FileCog, FilePlus2, FolderOpen, PackagePlus, ServerCog, Sparkles } from '@lucide/vue'
 import type { TeamContributionWorkspace } from '#shared/ipc'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ const { t } = useI18n()
 const tabs = computed(() => [
   { id: 'skills' as const, label: t('team.skillsTab'), icon: Sparkles },
   { id: 'mcp' as const, label: t('team.mcpTab'), icon: ServerCog },
+  { id: 'instructions' as const, label: t('team.instructionsTab'), icon: FileCog },
   { id: 'bundles' as const, label: t('team.bundlesTab'), icon: PackagePlus },
   { id: 'policy' as const, label: t('team.policyTab'), icon: Boxes },
   { id: 'changes' as const, label: t('team.changesTab'), icon: FilePlus2 },

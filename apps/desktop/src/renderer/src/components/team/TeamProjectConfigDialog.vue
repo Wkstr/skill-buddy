@@ -21,6 +21,7 @@ const teams = ref<string[]>([])
 const bundles = ref<string[]>([])
 const skills = ref<string[]>([])
 const mcp = ref<string[]>([])
+const instructions = ref<string[]>([])
 const error = ref<string | null>(null)
 const saving = ref(false)
 let suppressNextLibraryChange = false
@@ -34,6 +35,7 @@ const teamOptions = computed(() => catalog.value?.manifest.teams ?? [])
 const bundleOptions = computed(() => catalog.value?.bundles ?? [])
 const skillOptions = computed(() => catalog.value?.skills ?? [])
 const mcpOptions = computed(() => catalog.value?.mcpServers ?? [])
+const instructionOptions = computed(() => catalog.value?.instructions ?? [])
 
 function localRef(value: string, currentLibrary: string): string {
   const prefix = `${currentLibrary}:`
@@ -51,6 +53,7 @@ function reset(): void {
   bundles.value = (config?.requires.bundles ?? []).map((item) => localRef(item, selected))
   skills.value = (config?.requires.skills ?? []).map((item) => localRef(item, selected))
   mcp.value = (config?.requires.mcp ?? []).map((item) => localRef(item, selected))
+  instructions.value = (config?.requires.instructions ?? []).map((item) => localRef(item, selected))
   error.value = null
 }
 
@@ -68,6 +71,7 @@ watch(libraryId, (next, previous) => {
   bundles.value = []
   skills.value = []
   mcp.value = []
+  instructions.value = []
 })
 
 function toggle(values: string[], value: string): void {
@@ -88,7 +92,9 @@ async function submit(): Promise<void> {
       bundles: [...bundles.value],
       skills: [...skills.value],
       mcp: [...mcp.value],
+      instructions: [...instructions.value],
     },
+    ...(props.project.config?.policy ? { policy: props.project.config.policy } : {}),
   }
   try {
     await window.skillsManager.teamProjectConfigWrite(props.project.projectRoot, config)
@@ -145,6 +151,33 @@ async function submit(): Promise<void> {
                 <span class="min-w-0"><span class="block truncate font-medium">{{ item.name }}</span><span class="block truncate text-xs text-muted-foreground">{{ item.path }}</span></span>
               </label>
               <p v-if="!mcpOptions.length" class="px-3 py-6 text-center text-sm text-muted-foreground">{{ t('team.projectNoMcp') }}</p>
+            </section>
+            <section class="overflow-hidden rounded-md border">
+              <h3 class="border-b bg-muted/25 px-3 py-2 text-sm font-medium">
+                {{ t('team.instructionsTab') }}
+              </h3>
+              <label
+                v-for="item in instructionOptions"
+                :key="item.path"
+                class="flex cursor-pointer items-start gap-2 border-b px-3 py-2 text-sm last:border-b-0"
+              >
+                <input
+                  type="checkbox"
+                  :checked="instructions.includes(item.path)"
+                  class="mt-1"
+                  @change="toggle(instructions, item.path)"
+                >
+                <span class="min-w-0">
+                  <span class="block truncate font-medium">{{ item.name }}</span>
+                  <span class="block truncate text-xs text-muted-foreground">{{ item.target }}</span>
+                </span>
+              </label>
+              <p
+                v-if="!instructionOptions.length"
+                class="px-3 py-6 text-center text-sm text-muted-foreground"
+              >
+                {{ t('team.projectNoInstructions') }}
+              </p>
             </section>
           </template>
           <p v-if="!catalog" class="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{{ t('team.projectLibraryUnavailable') }}</p>

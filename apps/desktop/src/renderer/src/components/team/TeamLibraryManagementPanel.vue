@@ -4,14 +4,18 @@ import TeamBundleEditorDialog from '@/components/team/TeamBundleEditorDialog.vue
 import TeamChangeReview from '@/components/team/TeamChangeReview.vue'
 import TeamLibraryBundlesTab from '@/components/team/TeamLibraryBundlesTab.vue'
 import TeamLibraryMcpTab from '@/components/team/TeamLibraryMcpTab.vue'
+import TeamLibraryInstructionsTab from '@/components/team/TeamLibraryInstructionsTab.vue'
 import TeamLibraryPolicyTab from '@/components/team/TeamLibraryPolicyTab.vue'
 import TeamLibrarySetupPanel from '@/components/team/TeamLibrarySetupPanel.vue'
+import TeamPublishResult from '@/components/team/TeamPublishResult.vue'
 import TeamLibrarySkillsTab from '@/components/team/TeamLibrarySkillsTab.vue'
 import TeamLibraryWorkspaceHeader from '@/components/team/TeamLibraryWorkspaceHeader.vue'
 import TeamMcpEditorDialog from '@/components/team/TeamMcpEditorDialog.vue'
+import TeamInstructionEditorDialog from '@/components/team/TeamInstructionEditorDialog.vue'
 import TeamMcpMarketDialog from '@/components/team/TeamMcpMarketDialog.vue'
 import TeamSkillEditorDialog from '@/components/team/TeamSkillEditorDialog.vue'
 import TeamSkillMarketDialog from '@/components/team/TeamSkillMarketDialog.vue'
+import { confirmDialog } from '@/composables/useConfirm'
 import { useTeamLibraryWorkspaceEditor } from '@/composables/useTeamLibraryWorkspaceEditor'
 
 const { t } = useI18n()
@@ -33,6 +37,8 @@ const {
   editingSkill,
   mcpDialogOpen,
   editingMcp,
+  instructionDialogOpen,
+  editingInstruction,
   bundleDialogOpen,
   editingBundle,
   bundleError,
@@ -48,6 +54,9 @@ const {
   saveSkill,
   editMcp,
   saveMcp,
+  createInstruction,
+  editInstruction,
+  saveInstruction,
   createBundle,
   editBundle,
   saveBundle,
@@ -59,10 +68,26 @@ const {
   remove,
   savePolicy,
 } = useTeamLibraryWorkspaceEditor()
+
+/** 放弃草稿会删除整个工作区目录，未推送的改动无法恢复，必须先确认。 */
+async function discardDraft(): Promise<void> {
+  const confirmed = await confirmDialog({
+    title: t('team.discardDraftTitle'),
+    message: t('team.discardDraftMessage'),
+    confirmLabel: t('team.discardDraft'),
+    cancelLabel: t('common.cancel'),
+    danger: true,
+  })
+  if (confirmed) await manager.discard()
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
+    <TeamPublishResult
+      v-if="!manager.workspace.value"
+      :result="manager.publishResult.value"
+    />
     <TeamLibrarySetupPanel
       v-if="manager.restoring.value || !manager.workspace.value"
       :restoring="manager.restoring.value"
@@ -99,6 +124,13 @@ const {
         @edit="editMcp"
         @remove="remove($event, t('team.assetMcp'))"
       />
+      <TeamLibraryInstructionsTab
+        v-else-if="activeTab === 'instructions'"
+        :instructions="catalog?.instructions ?? []"
+        @create="createInstruction"
+        @edit="editInstruction"
+        @remove="remove($event, t('team.assetInstruction'))"
+      />
       <TeamLibraryBundlesTab
         v-else-if="activeTab === 'bundles'"
         :bundles="catalog?.bundles ?? []"
@@ -122,7 +154,7 @@ const {
         :result="manager.publishResult.value"
         :busy="manager.busy.value"
         @open="manager.openWorkspace"
-        @discard="manager.discard"
+        @discard="discardDraft"
         @publish="manager.publish"
       />
     </template>
@@ -140,6 +172,13 @@ const {
       :busy="manager.busy.value"
       @close="mcpDialogOpen = false"
       @save="saveMcp"
+    />
+    <TeamInstructionEditorDialog
+      :open="instructionDialogOpen"
+      :initial="editingInstruction"
+      :busy="manager.busy.value"
+      @close="instructionDialogOpen = false"
+      @save="saveInstruction"
     />
     <TeamBundleEditorDialog
       :open="bundleDialogOpen"
